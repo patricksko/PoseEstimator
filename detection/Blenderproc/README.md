@@ -4,7 +4,7 @@ Before running the project, you need to prepare the datasets. Follow the steps b
 
 ### 1. Create the `resources` Directory
 
-In the root of the project, create a folder named:
+In this folder, create a folder named:
 
 resources/
 
