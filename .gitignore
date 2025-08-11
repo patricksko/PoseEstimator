@@ -8,7 +8,7 @@ blender
 .vscode/
 output/
 debug/
-detection/resources/*
+detection/Blenderproc/resources/*
 *.blend1
 .vscode
 *.pyc
