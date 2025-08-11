@@ -9,6 +9,8 @@ blender
 output/
 debug/
 detection/Blenderproc/resources/*
+detection/Blenderproc/output_blenderproc_full/*
+detection/YOLO/output_runs/*
 *.blend1
 .vscode
 *.pyc
