@@ -28,4 +28,5 @@ conda activate pose_estimator_env
  ```
 pip install -r requirements.txt
 ```
-# Example
+# Usage
+For detailed instructions on each component, please refer to the README files located within their respective subfolders.
