@@ -1,0 +1,6 @@
+[submodule "detection/grounded-sam2"]
+	path = detection/grounded-sam2
+	url = git@github.com:patricksko/Sketection-Sam2.git
+[submodule "registration/TEASER-plusplus"]
+	path = registration/TEASER-plusplus
+	url = git@github.com:patricksko/TEASER-plusplus.git
