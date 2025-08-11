@@ -3,7 +3,7 @@ from ultralytics import YOLO
 model = YOLO("yolo11n-seg.pt")
 
 result = model.train(
-    data="./my_examples/dataset.yaml",
+    data="/home/skoumal/dev/ObjectDetection/detection/YOLO/dataset.yaml",
     epochs = 100,
     imgsz=640,
     batch=16,
@@ -13,7 +13,7 @@ result = model.train(
     name="Legoblock",
     save=True,
     save_json=True,
-    project="runs2",
+    project="/home/skoumal/dev/ObjectDetection/detection/YOLO/output_runs",
     exist_ok=True,
     resume=False,
     patience=10,

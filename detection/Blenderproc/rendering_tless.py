@@ -5,8 +5,8 @@ import numpy as np
 from pathlib import Path
 import json
 import random
-import debugpy
-import cv2
+# import debugpy
+# import cv2
 
 # debugpy.listen(5678)
 # debugpy.wait_for_client()
@@ -38,7 +38,7 @@ num_targets = json_config['dataset']['num_targets']
 bproc.init()
 
 # load bop objects into the scene
-target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock_full'), model_type = 'cad', object_model_unit='mm')
+target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock'), model_type = 'cad', object_model_unit='mm')
 # SOLUTION 1: Set all Lego blocks to have the same category_id
 # This ensures they're treated as the same class
 LEGO_CLASS_ID = 1  # Single class ID for all Lego blocks
