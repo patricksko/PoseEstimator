@@ -7,6 +7,15 @@ import copy
 import time
 import glob
 import os
+from dataclasses import dataclass
+
+@dataclass
+class TemplateMetrics:
+    template_idx: int
+    num_correspondences: int
+    num_inliers: int
+    num_s_inliers: int
+    num_t_inliers: int
 
 
 
@@ -38,10 +47,10 @@ def load_camera_intrinsics(scene_camera_path, frame_id, image_width, image_heigh
     )
     return intrinsic, depth_scale
 
-def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask_path):
+def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     depth_raw = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 1000.0
     color_raw = cv2.imread(rgb_path)
-    mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
+    #mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
     
     binary_mask = (mask == 255).astype(np.uint8)
     mask_pixels = np.sum(binary_mask)
@@ -165,7 +174,7 @@ def preprocess_point_cloud_uniform(pcd, target_points=500):
     print(f"FPFH feature dimension: {fpfh.dimension()}")
     return pcd_down, fpfh
 
-def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0.05):
+def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0.1):
     # Try different distance thresholds if needed
     for dist_thresh in [distance_threshold, distance_threshold*2, distance_threshold*0.5]:
         result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
@@ -207,6 +216,8 @@ def run_teaser(source, target, correspondences):
     sol = solver.getSolution()
     
     R_inliers = solver.getRotationInliers()
+    s_inliers = solver.getScaleInliers()
+    t_inliers = solver.getTranslationInliers()
     R = np.array(sol.rotation)
     t = np.array(sol.translation).reshape((3, 1))
     
@@ -214,38 +225,44 @@ def run_teaser(source, target, correspondences):
     T[:3, :3] = R
     T[:3, 3:] = t
     
-    return T, R_inliers
+    return T, R_inliers, s_inliers, t_inliers
 
 def find_best_template_teaser(scene_pcd, template_pcds, target_points=500):
-    # Preprocess scene
     scene_down, scene_fpfh = preprocess_point_cloud_uniform(scene_pcd, target_points)
     
     best_inliers = -1
     best_idx = -1
     best_transform = np.eye(4)
     
+    all_metrics = []  # store metrics for all templates
+    
     for idx, template_pcd in enumerate(template_pcds):
-        # Preprocess template
         template_down, template_fpfh = preprocess_point_cloud_uniform(template_pcd, target_points)
         if template_down is None:
             continue
         
-        # Get correspondences and run TEASER++
         correspondences = get_correspondences(template_down, scene_down, template_fpfh, scene_fpfh)
-        T, R_inliers = run_teaser(template_down, scene_down, correspondences)
+        T, R_inliers, s_inliers, t_inliers = run_teaser(template_down, scene_down, correspondences)
         
-        inlier_count = len(R_inliers) if R_inliers is not None else 0
-        print(f"Template {idx}: {len(correspondences)} corr, {inlier_count} inliers")
-        # Append to file
-        with open("inlier_counts.txt", "a") as f:
-            f.write(f"Template {idx}: {len(correspondences)} correspondences, {inlier_count} inliers\n")
+        R_inlier_count = len(R_inliers) if R_inliers is not None else 0
+        s_inlier_count = len(s_inliers) if R_inliers is not None else 0
+        t_inlier_count = len(t_inliers) if R_inliers is not None else 0
         
-        if inlier_count > best_inliers:
-            best_inliers = inlier_count
+        metrics = TemplateMetrics(
+            template_idx=idx,
+            num_correspondences=len(correspondences),
+            num_inliers=R_inlier_count,
+            num_s_inliers = s_inlier_count,
+            num_t_inliers = t_inlier_count
+        )
+        all_metrics.append(metrics)
+        
+        if idx == 8:#R_inlier_count > best_inliers:
+            best_inliers = R_inlier_count
             best_idx = idx
             best_transform = T
     
-    return best_idx, best_transform, best_inliers
+    return best_idx, best_transform, best_inliers, all_metrics
 
 def try_manual_alignment(cad_pcd, scene_pcd, scale_ratio):
     """Try manual initial alignment based on centroids, scale, and PCA rotation"""

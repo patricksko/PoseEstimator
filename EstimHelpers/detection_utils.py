@@ -1,8 +1,9 @@
 import cv2
 import os
+import numpy as np
 from ultralytics import YOLO
 
-def generate_segmentation_polygons_yolo_format(weights_path, image_path, output_folder, class_id=0):
+def detect_mask(weights_path, image_path, class_id=0):
     # Load model
     model = YOLO(weights_path)
 
@@ -19,5 +20,20 @@ def generate_segmentation_polygons_yolo_format(weights_path, image_path, output_
         conf=0.7,
         device="0",
         save=False,
+        verbose=False
     )
+    # Create an empty binary mask
+    mask = np.zeros((height, width), dtype=np.uint8)
 
+    # Process results (masks if available)
+    for r in results:
+        if not hasattr(r, "masks") or r.masks is None:
+            continue
+        
+        for seg, cls in zip(r.masks.xy, r.boxes.cls):
+            if int(cls) != class_id:
+                continue
+            polygon = np.array(seg, dtype=np.int32)
+            cv2.fillPoly(mask, [polygon], 255)
+
+    return mask
