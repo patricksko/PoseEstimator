@@ -22,6 +22,7 @@ def detect_mask(weights_path, image_path, class_id=0):
         save=False,
         verbose=False
     )
+    
     # Create an empty binary mask
     mask = np.zeros((height, width), dtype=np.uint8)
 
@@ -35,5 +36,6 @@ def detect_mask(weights_path, image_path, class_id=0):
                 continue
             polygon = np.array(seg, dtype=np.int32)
             cv2.fillPoly(mask, [polygon], 255)
+            return mask  # immediately return after first match
 
     return mask

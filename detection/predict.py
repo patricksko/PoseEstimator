@@ -18,37 +18,37 @@ def generate_segmentation_polygons_yolo_format(weights_path, image_path, output_
         imgsz=640,
         conf=0.7,
         device="0",
-        save=False,
+        save=True,
     )
 
-    result = results[0]
+    # result = results[0]
 
-    if result.masks is not None and result.masks.xy is not None:
-        polygons = result.masks.xy  # list of np arrays with polygon points
+    # if result.masks is not None and result.masks.xy is not None:
+    #     polygons = result.masks.xy  # list of np arrays with polygon points
 
-        os.makedirs(output_folder, exist_ok=True)
-        txt_path = os.path.join(output_folder, "segmentation_polygons.txt")
+    #     os.makedirs(output_folder, exist_ok=True)
+    #     txt_path = os.path.join(output_folder, "segmentation_polygons.txt")
 
-        with open(txt_path, "w") as f:
-            for poly in polygons:
-                # Normalize points by image size
-                normalized_points = []
-                for x, y in poly.tolist():
-                    xn = x / width
-                    yn = y / height
-                    normalized_points.extend([xn, yn])
+    #     with open(txt_path, "w") as f:
+    #         for poly in polygons:
+    #             # Normalize points by image size
+    #             normalized_points = []
+    #             for x, y in poly.tolist():
+    #                 xn = x / width
+    #                 yn = y / height
+    #                 normalized_points.extend([xn, yn])
 
-                # Format: class_id x1 y1 x2 y2 ...
-                line = f"{class_id} " + " ".join(f"{p:.6f}" for p in normalized_points)
-                f.write(line + "\n")
+    #             # Format: class_id x1 y1 x2 y2 ...
+    #             line = f"{class_id} " + " ".join(f"{p:.6f}" for p in normalized_points)
+    #             f.write(line + "\n")
 
-        print(f"Saved segmentation polygons in YOLO format to {txt_path}")
-    else:
-        print("No segmentation polygons found in prediction.")
+    #     print(f"Saved segmentation polygons in YOLO format to {txt_path}")
+    # else:
+    #     print("No segmentation polygons found in prediction.")
 
 if __name__ == "__main__":
     weights = "/home/skoumal/dev/ObjectDetection/detection/best.pt"
-    img_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/rgb/000000.jpg"
+    img_path = "/home/skoumal/dev/BlenderProc/frame0071.jpg"
     out_dir = "/home/skoumal/dev/ObjectDetection/detection/"
 
     generate_segmentation_polygons_yolo_format(weights, img_path, out_dir)

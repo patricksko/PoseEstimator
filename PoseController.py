@@ -1,5 +1,6 @@
 import numpy as np
 import open3d as o3d
+import cv2
 from EstimHelpers.registration_utils import find_best_template_teaser, get_pointcloud, preprocess_point_cloud_uniform
 
 
@@ -15,11 +16,16 @@ if __name__ == "__main__":
 
   
     pcd = o3d.io.read_point_cloud(cad)
+    # Transform coordinate system
+    pcd.transform([[1, 0, 0, 0],
+                   [0, -1, 0, 0],
+                   [0, 0, -1, 0],
+                   [0, 0, 0, 1]])
     
     # for pcd in pointclouds:
     #     o3d.visualization.draw_geometries([pcd.paint_uniform_color([1, 0, 0])])
-
-    scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask_path)
+    mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
+    scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
 
     o3d.visualization.draw_geometries([scene_pcd.paint_uniform_color([1, 0, 0]),
                                         pcd.paint_uniform_color([0, 1, 0])])
