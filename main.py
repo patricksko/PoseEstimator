@@ -13,15 +13,15 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     weights = "/home/skoumal/dev/ObjectDetection/detection/best.pt"
-    rgb_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/rgb/000000.jpg"
-    depth_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/depth/000000.png"
+    rgb_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/rgb/000001.jpg"
+    depth_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/depth/000001.png"
     scene_camera_path = "/home/skoumal/dev/BlenderProc/my_examples/output_blenderproc/bop_data/Legoblock/train_pbr/000000/scene_camera.json"
 
     mask = detect_mask(weights, rgb_path)
     
     #Read CAD Path
     cad_path = "/home/skoumal/dev/TEASER-plusplus/build/python/lego_views/"
-
+   
     # Read all ply files
     ply_files = sorted(glob.glob(os.path.join(cad_path, "*.ply")))
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     
     start_time = time.time()
     best_idx, best_transform, best_inliers, all_metrics = find_best_template_teaser(scene_pcd, pointclouds, target_points=100)
-  
+    
 
 
 
@@ -81,30 +81,35 @@ if __name__ == "__main__":
     o3d.visualization.draw_geometries([scene_pcd.paint_uniform_color([1, 0, 0]),
                                         cad_pcd.paint_uniform_color([0, 1, 0])])
     
-    cam_pose_path = "/home/skoumal/dev/ObjectDetection/registration/TEASER-plusplus/my_examples/lego_views/pose_08.npy"  # example for frame 5
+    cam_pose_path = "/home/skoumal/dev/ObjectDetection/registration/TEASER-plusplus/my_examples/lego_views/pose_08.npy"  
 
     # Load the camera pose matrix
     cam_pose = np.load(cam_pose_path)
+    cam_rotation = cam_pose[:3, :3]
+    cam_translation = cam_pose[:3, 3]
+    
+    rotation_matrix = best_transform[:3, :3]
+    translation_vector = best_transform[:3, 3]
 
-    # Compute object pose in world coordinates
-    object_pose_world = cam_pose @ best_transform
+    # If you have the template pose, you might need to compose transformations
+    if cam_pose is not None:
+        # Convert template pose to transformation matrix
+        template_rotation = cam_rotation.reshape(3, 3)
+        template_translation = cam_translation.reshape(3, 1)
+        
+        template_transform = np.eye(4)
+        template_transform[:3, :3] = template_rotation
+        template_transform[:3, 3] = template_translation.flatten()
+        
+        # Compose: final_pose = teaser_transform @ template_transform
+        final_transform = best_transform @ template_transform
+        
+        rotation_matrix = final_transform[:3, :3]
+        translation_vector = final_transform[:3, 3]
+    
+    np.savetxt("finaltransform.txt", best_transform, fmt="%.6f")
 
-    # Extract translation (position)
-    position = object_pose_world[:3, 3]
 
-    # Extract rotation matrix
-    rotation = object_pose_world[:3, :3]
-
-    # Optionally convert rotation matrix to Euler angles or quaternion
-    from scipy.spatial.transform import Rotation as R
-
-    r = R.from_matrix(rotation)
-    euler_angles = r.as_euler('xyz', degrees=True)
-    quaternion = r.as_quat()  # x,y,z,w
-
-    print("Object position (world):", position)
-    print("Object rotation (Euler angles xyz degrees):", euler_angles)
-    print("Object rotation (quaternion x,y,z,w):", quaternion)
     
         
 
