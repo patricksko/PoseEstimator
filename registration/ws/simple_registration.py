@@ -12,19 +12,30 @@ def get_angular_error(R_exp, R_est):
 
 if __name__ == "__main__":
     # Load images
-    rgb_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/rgb/000000.jpg"
-    depth_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/depth/000000.png"
-    mask_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/mask/000000_000000.png"
-    scene_camera_path = "/home/skoumal/dev/BlenderProc/my_examples/output_blenderproc/bop_data/Legoblock/train_pbr/000000/scene_camera.json"
+    cad_path = "/home/skoumal/dev/ObjectDetection/registration/ws/LegoBlock_variant.ply"
     
-    T = np.array(
-        [[9.96926560e-01, 6.68735757e-02, -4.06664421e-02, -1.15576939e-01],
-         [-6.61289946e-02, 9.97617877e-01, 1.94008687e-02, -3.87705398e-02],
-         [4.18675510e-02, -1.66517807e-02, 9.98977765e-01, 1.14874890e-01],
-         [0, 0, 0, 1]])
-    
+    theta_x = np.deg2rad(45)
+    theta_z = np.deg2rad(90)
 
-    src_cloud = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask_path)
+    Rx = np.array([
+        [1, 0, 0],
+        [0, np.cos(theta_x), -np.sin(theta_x)],
+        [0, np.sin(theta_x), np.cos(theta_x)]
+    ])
+
+    Rz = np.array([
+        [np.cos(theta_z), -np.sin(theta_z), 0],
+        [np.sin(theta_z),  np.cos(theta_z), 0],
+        [0, 0, 1]
+    ])
+
+    R = Rz @ Rx  # rotate X then Z
+
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = [-0.115576939, -0.0387705398, 0.114874890]
+    
+    src_cloud = o3d.io.read_point_cloud(cad_path)
     src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, 300)
     dst_cloud = copy.deepcopy(src_cloud)
     dst_cloud.transform(T)
@@ -36,7 +47,7 @@ if __name__ == "__main__":
     H, R_inliers, s_inliers, t_inliers = run_teaser(src_down, dst_down, correspondences)
 
     final_template = copy.deepcopy(src_cloud)
-    final_template.transform(T)
+    final_template.transform(H)
 
     print("=====================================")
     print("          TEASER++ Results           ")
@@ -56,5 +67,6 @@ if __name__ == "__main__":
     print("Error (m): ")
     print(np.linalg.norm(T[:3, 3] - H[:3, 3]))
 
-
+    o3d.visualization.draw_geometries([dst_cloud.paint_uniform_color([1, 0, 0]),
+                                        final_template.paint_uniform_color([0, 1, 0])])
     
