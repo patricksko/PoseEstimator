@@ -50,7 +50,7 @@ def load_camera_intrinsics(scene_camera_path, frame_id, image_width, image_heigh
 def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     depth_raw = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 1000.0
     color_raw = cv2.imread(rgb_path)
-    mask = cv2.imread(mask, cv2.IMREAD_UNCHANGED)
+    
     
     binary_mask = (mask == 255).astype(np.uint8)
     mask_pixels = np.sum(binary_mask)

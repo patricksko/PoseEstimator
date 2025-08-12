@@ -78,7 +78,7 @@ renderer = pyrender.OffscreenRenderer(viewport_width=640, viewport_height=480)
 
 # Define camera intrinsics
 focal_length = 500.0
-camera = pyrender.IntrinsicsCamera(fx=focal_length, fy=focal_length, cx=320, cy=240)
+camera = pyrender.IntrinsicsCamera(fx=1077.8360, fy=1078.1890, cx=323.7872 , cy=279.6921)
 cam_node = scene.add(camera)
 
 # Add a directional light

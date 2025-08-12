@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # for pcd in pointclouds:
     #     o3d.visualization.draw_geometries([pcd.paint_uniform_color([1, 0, 0])])
 
-    scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask_path=mask_path)
+    scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask_path)
     #scene_pcd_centered = scene_pcd.translate(-scene_pcd.get_center())
 
 
