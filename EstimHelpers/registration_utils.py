@@ -18,6 +18,11 @@ class TemplateMetrics:
     num_t_inliers: int
 
 
+def Rt2T(R,t):
+    T = np.identity(4)
+    T[:3,:3] = R
+    T[:3,3] = t
+    return T 
 
 def load_camera_intrinsics(scene_camera_path, frame_id, image_width, image_height):
     """
@@ -174,6 +179,7 @@ def preprocess_point_cloud_uniform(pcd, target_points=500):
     print(f"FPFH feature dimension: {fpfh.dimension()}")
     return pcd_down, fpfh
 
+
 def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0.1):
     # Try different distance thresholds if needed
     for dist_thresh in [distance_threshold, distance_threshold*2, distance_threshold*0.5]:
@@ -194,6 +200,42 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
             return result.correspondence_set
 
     return result.correspondence_set
+
+
+
+
+import copy
+def visualize_correspondences(src_down, dst_down, correspondences, offset=(0.1,0,0)):
+    """
+    Visualize correspondences between two point clouds in Open3D.
+    """
+    src_temp = copy.deepcopy(src_down)
+    dst_temp = copy.deepcopy(dst_down)
+
+    src_temp = src_temp.translate((0, 0, 0))
+    dst_temp = dst_temp.translate(offset)  # Shift for visibility
+
+    # Create lines connecting corresponding points
+    lines = []
+    colors = []
+    for (src_idx, dst_idx) in correspondences:
+        lines.append([src_idx, len(src_down.points) + dst_idx])
+        colors.append([0, 0, 1])  # blue lines
+
+    # Merge both clouds into a single point cloud for LineSet indexing
+    merged_points = np.vstack((np.asarray(src_temp.points), np.asarray(dst_temp.points)))
+    line_set = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(merged_points),
+        lines=o3d.utility.Vector2iVector(lines)
+    )
+    line_set.colors = o3d.utility.Vector3dVector(colors)
+
+    src_temp.paint_uniform_color([1, 0, 0])
+    dst_temp.paint_uniform_color([0, 1, 0])
+
+    o3d.visualization.draw_geometries([src_temp, dst_temp, line_set])
+
+
 
 def run_teaser(source, target, correspondences):
     if len(correspondences) < 3:
@@ -289,3 +331,91 @@ def center_pointcloud(pcd):
     """Center pointcloud at origin"""
     centered = pcd.translate(-pcd.get_center())
     return centered
+
+
+
+def crop_pointcloud_fov(pcd, fov_deg=60.0, look_dir=np.array([0, 0, 1])):
+    """
+    Crops a point cloud to simulate a camera FoV.
+    - pcd: Open3D PointCloud
+    - fov_deg: field of view in degrees
+    - look_dir: viewing direction vector (camera looks along this)
+    """
+    points = np.asarray(pcd.points)
+    look_dir = look_dir / np.linalg.norm(look_dir)
+    fov_rad = np.deg2rad(fov_deg)
+
+    # Compute angles between look_dir and each point vector
+    norms = np.linalg.norm(points, axis=1)
+    norms[norms == 0] = 1e-8
+    dirs = points / norms[:, None]
+    cos_angles = np.dot(dirs, look_dir)
+    mask = cos_angles > np.cos(fov_rad / 2)
+
+    return pcd.select_by_index(np.where(mask)[0])
+
+def crop_pointcloud_fov_hpr(pcd, camera_position=np.array([0, 0, -1]),
+                            camera_lookat=np.array([0, 0, 0]),
+                            fov_deg=60.0):
+    """
+    Simulates a camera FoV with hidden point removal.
+    Returns only points visible from the given camera position and direction.
+    
+    Parameters:
+    - pcd: Open3D PointCloud
+    - camera_position: 3D position of the camera
+    - camera_lookat: target point the camera is looking at
+    - fov_deg: field of view (degrees)
+    """
+    # View direction
+    cam_dir = camera_lookat - camera_position
+    cam_dir /= np.linalg.norm(cam_dir)
+
+    # First, remove points outside the angular FoV
+    points = np.asarray(pcd.points)
+    vecs = points - camera_position
+    vecs_norm = np.linalg.norm(vecs, axis=1)
+    vecs_norm[vecs_norm == 0] = 1e-8
+    dirs = vecs / vecs_norm[:, None]
+
+    cos_angles = np.dot(dirs, cam_dir)
+    mask_fov = cos_angles > np.cos(np.deg2rad(fov_deg) / 2)
+    pcd_fov = pcd.select_by_index(np.where(mask_fov)[0])
+
+    # Now apply Hidden Point Removal to simulate occlusion
+    radius = np.linalg.norm(np.asarray(pcd_fov.points) - camera_position, axis=1).max() * 1.5
+    _, pt_map = pcd_fov.hidden_point_removal(camera_position, radius)
+    pcd_visible = pcd_fov.select_by_index(pt_map)
+
+    return pcd_visible
+
+
+def apply_transform_and_noise(pcd, R, t, noise_sigma=0.0):
+    """
+    Applies rigid transform and optional Gaussian noise to a point cloud.
+    - R: 3x3 rotation matrix
+    - t: 3-element translation vector
+    - noise_sigma: standard deviation of Gaussian noise
+    """
+    transformed = copy.deepcopy(pcd)
+    pts = np.asarray(transformed.points)
+    pts = (R @ pts.T).T + t
+    if noise_sigma > 0:
+        pts += np.random.normal(scale=noise_sigma, size=pts.shape)
+    transformed.points = o3d.utility.Vector3dVector(pts)
+    return transformed
+
+
+def sample_pointcloud_with_noise(mesh, num_points=5000, jitter_sigma=0.0):
+    """
+    Samples a point cloud from a mesh with optional jitter noise per point.
+    - mesh: Open3D TriangleMesh
+    - num_points: number of points to sample
+    - jitter_sigma: standard deviation for Gaussian noise
+    """
+    pcd = mesh.sample_points_uniformly(number_of_points=num_points)
+    if jitter_sigma > 0:
+        pts = np.asarray(pcd.points)
+        pts += np.random.normal(scale=jitter_sigma, size=pts.shape)
+        pcd.points = o3d.utility.Vector3dVector(pts)
+    return pcd
