@@ -12,6 +12,10 @@ import cv2
 import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
+
+    #Read CAD Path
+    cad_path = "/home/skoumal/dev/TEASER-plusplus/build/python/lego_views/"
+    
     weights = "./data/best.pt"
     rgb_path = "./data/000000.jpg"
     depth_path = "./data/000000.png"
@@ -20,9 +24,8 @@ if __name__ == "__main__":
     mask = detect_mask(weights, rgb_path)
     
     gt_data = "./data/scene_gt.json"
-    #Read CAD Path
+    # #Read CAD Path
     cad_path = "./data/lego_views/"
-    
     ply_files = sorted(glob.glob(os.path.join(cad_path, "*.ply")))
 
     pointclouds = []
@@ -35,10 +38,10 @@ if __name__ == "__main__":
     scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
 
 
-    # o3d.visualization.draw_geometries([
-    #     scene_pcd.paint_uniform_color([1, 0, 0]),
-    #     pointclouds[8].paint_uniform_color([0, 1, 0])
-    # ])
+    o3d.visualization.draw_geometries([
+        scene_pcd.paint_uniform_color([1, 0, 0]),
+        pointclouds[8].paint_uniform_color([0, 1, 0])
+    ])
     
     if scene_pcd is None or len(scene_pcd.points) == 0:
         print("Failed to generate scene point cloud!")
