@@ -54,7 +54,7 @@ def get_cube_26_directions(radius=0.2):
 
     return directions  # list of 26 vectors
 # Load the 3D model
-mesh = trimesh.load("/home/skoumal/dev/BlenderProc/LegoBlock_variant.ply")
+mesh = trimesh.load("../../data/LegoBlock_variant.ply")
 blue_color = np.array([0, 0, 255, 255], dtype=np.uint8)  # RGBA
 mesh.visual.vertex_colors = np.tile([0, 0, 255, 255], (len(mesh.vertices), 1))  # solid blue
 
@@ -86,7 +86,7 @@ light = pyrender.DirectionalLight(color=np.ones(3), intensity=2.0)
 scene.add(light)
 
 # Output folder
-output_dir = "lego_views"
+output_dir = "../../data/lego_views"
 os.makedirs(output_dir, exist_ok=True)
 
 directions = get_cube_26_directions(radius=0.2)

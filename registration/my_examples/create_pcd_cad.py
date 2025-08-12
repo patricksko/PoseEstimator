@@ -43,7 +43,7 @@ def create_pointcloud(rgb_path, depth_path, depth_scale=1.0, is_depth_npy=True):
 
 
 # Example usage
-folder = "/home/skoumal/dev/TEASER-plusplus/build/python/lego_views"
+folder = "../../data/lego_views"
 
 rgb_files = sorted(glob.glob(os.path.join(folder, "rgb_*.png")))
 depth_files = sorted(glob.glob(os.path.join(folder, "depth_*.npy")))

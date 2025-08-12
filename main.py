@@ -12,16 +12,16 @@ import cv2
 import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
-    weights = "/home/skoumal/dev/ObjectDetection/detection/best.pt"
-    rgb_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/rgb/000000.jpg"
-    depth_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/depth/000000.png"
-    scene_camera_path = "/home/skoumal/dev/BlenderProc/my_examples/output_blenderproc/bop_data/Legoblock/train_pbr/000000/scene_camera.json"
+    weights = "./data/best.pt"
+    rgb_path = "./data/000000.jpg"
+    depth_path = "./data/000000.png"
+    scene_camera_path = "./data/scene_camera.json"
 
     mask = detect_mask(weights, rgb_path)
     
-    gt_data = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/scene_gt.json"
+    gt_data = "./data/scene_gt.json"
     #Read CAD Path
-    cad_path = "/home/skoumal/dev/TEASER-plusplus/build/python/lego_views/"
+    cad_path = "./data/lego_views/"
     
     ply_files = sorted(glob.glob(os.path.join(cad_path, "*.ply")))
 
