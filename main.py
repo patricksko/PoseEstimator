@@ -19,10 +19,10 @@ if __name__ == "__main__":
 
     mask = detect_mask(weights, rgb_path)
     
+    gt_data = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/scene_gt.json"
     #Read CAD Path
     cad_path = "/home/skoumal/dev/TEASER-plusplus/build/python/lego_views/"
-   
-    # Read all ply files
+    
     ply_files = sorted(glob.glob(os.path.join(cad_path, "*.ply")))
 
     pointclouds = []
@@ -34,6 +34,12 @@ if __name__ == "__main__":
 
     scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
 
+
+    # o3d.visualization.draw_geometries([
+    #     scene_pcd.paint_uniform_color([1, 0, 0]),
+    #     pointclouds[8].paint_uniform_color([0, 1, 0])
+    # ])
+    
     if scene_pcd is None or len(scene_pcd.points) == 0:
         print("Failed to generate scene point cloud!")
         exit(1)
@@ -61,7 +67,36 @@ if __name__ == "__main__":
     #cad_aligned = try_manual_alignment(cad_pcd, scene_pcd, scale_ratio)
     o3d.visualization.draw_geometries([scene_pcd.paint_uniform_color([1, 0, 0]),
                                         cad_pcd.paint_uniform_color([0, 1, 0])])
-    
+    # Read JSON file
+    with open(gt_data, "r") as f:
+        data = json.load(f)
+
+    # Take the first image/frame entry
+    first_key = sorted(data.keys())[0]  # e.g., "0"
+    first_obj = data[first_key][0]      # first object in that frame
+
+    # Extract rotation and translation
+    R_list = first_obj["cam_R_m2c"]
+    t_list = first_obj["cam_t_m2c"]
+
+    # Convert to numpy arrays
+    R = np.array(R_list).reshape(3, 3)
+    t = np.array(t_list).reshape(3, 1)
+
+    R_est = best_transform[:3, :3]
+    t_est = best_transform[:3, 3:]
+
+    print("Groundtruth Rotation")
+    print(R)
+    print("Estimated Rotation")
+    print(R_est)
+
+    print("Groundtruth Translation")
+    print(t)
+    print("Estimated Translation")
+    print(t_est)
+
+
     np.savetxt("finaltransform.txt", best_transform, fmt="%.6f")
 
 
