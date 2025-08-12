@@ -27,7 +27,9 @@ docs/source/examples/
 docs/source/*md
 blenderproc_resources/
 EstimHelpers.egg-info/
-
+registration/my_examples/lego_views/*
+registration/my_examples/projection_templates/*
+registration/my_examples/__pycache__/*
 
 
 .venv/
