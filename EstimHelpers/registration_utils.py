@@ -89,10 +89,10 @@ def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image, intrinsic)
 
     # Transform coordinate system
-    pcd.transform([[1, 0, 0, 0],
-                   [0, -1, 0, 0],
-                   [0, 0, -1, 0],
-                   [0, 0, 0, 1]])
+    # pcd.transform([[1, 0, 0, 0],
+    #                [0, -1, 0, 0],
+    #                [0, 0, -1, 0],
+    #                [0, 0, 0, 1]])
     
     # Remove outliers
     if len(pcd.points) > 0:
@@ -299,12 +299,14 @@ def find_best_template_teaser(scene_pcd, template_pcds, target_points=500):
         )
         all_metrics.append(metrics)
         
-        if idx == 8:#R_inlier_count > best_inliers:
+        if idx == 6:#R_inlier_count > best_inliers:
             best_inliers = R_inlier_count
             best_idx = idx
             best_transform = T
+            visualize_correspondences(template_down, scene_down, correspondences)
     
     return best_idx, best_transform, best_inliers, all_metrics
+
 
 def try_manual_alignment(cad_pcd, scene_pcd, scale_ratio):
     """Try manual initial alignment based on centroids, scale, and PCA rotation"""
@@ -419,3 +421,19 @@ def sample_pointcloud_with_noise(mesh, num_points=5000, jitter_sigma=0.0):
         pts += np.random.normal(scale=jitter_sigma, size=pts.shape)
         pcd.points = o3d.utility.Vector3dVector(pts)
     return pcd
+
+
+def pyrender_to_open3d(pose_pyrender):
+    """
+    Convert a 4x4 camera pose from pyrender (X-right, Y-forward, Z-up)
+    to Open3D coordinates (X-right, Y-up, Z-forward).
+    """
+    # Rotation to swap Y and Z axes
+    R_swap = np.array([[-1, 0, 0],
+                       [0, 0, -1],
+                       [0, 1, 0]])
+    
+    T_new = np.eye(4)
+    T_new[:3, :3] = R_swap @ pose_pyrender[:3, :3]
+    T_new[:3, 3] = R_swap @ pose_pyrender[:3, 3]
+    return T_new

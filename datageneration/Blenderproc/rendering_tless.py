@@ -206,7 +206,17 @@ for i in range(num_scenes):
 
     # render the whole pipeline
     data = bproc.renderer.render()
+    obj2world_dict = {}
 
+    for obj in sampled_target_bop_objs + sampled_distractor_bop_objs:
+        T_obj2world = obj.get_local2world_mat()
+        # convert translation to mm
+        T_obj2world[:3, 3] *= 1000.0
+        obj2world_dict[obj.get_name()] = T_obj2world.tolist()
+
+    # save to file
+    with open(Path(output_dir) / f"scene_{i:06d}_obj2world.json", "w") as f:
+        json.dump(obj2world_dict, f, indent=2)
     # Write data in bop format
     bproc.writer.write_bop(os.path.join(output_dir, 'bop_data'),
                            target_objects = sampled_target_bop_objs,

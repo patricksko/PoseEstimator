@@ -36,16 +36,16 @@ if __name__ == "__main__":
     
 
     scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
-
+    if scene_pcd is None or len(scene_pcd.points) == 0:
+            print("Failed to generate scene point cloud!")
+            exit(1)
 
     o3d.visualization.draw_geometries([
         scene_pcd.paint_uniform_color([1, 0, 0]),
         pointclouds[8].paint_uniform_color([0, 1, 0])
     ])
     
-    if scene_pcd is None or len(scene_pcd.points) == 0:
-        print("Failed to generate scene point cloud!")
-        exit(1)
+    
     
     start_time = time.time()
     best_idx, best_transform, best_inliers, all_metrics = find_best_template_teaser(scene_pcd, pointclouds, target_points=100)
