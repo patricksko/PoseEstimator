@@ -30,6 +30,7 @@ EstimHelpers.egg-info/
 registration/my_examples/lego_views/*
 registration/my_examples/projection_templates/*
 registration/my_examples/__pycache__/*
+data/*
 
 
 .venv/
