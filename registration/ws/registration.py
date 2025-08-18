@@ -43,7 +43,7 @@ def create_test_data():
     dst_mesh_sample = sample_pointcloud_with_noise(cad_mesh, num_points=500, jitter_sigma=0.0005)
     
     # Apply camera FoV + HPR
-    camera_pos_src = np.array([0.3, 0.2, -0.5])
+    camera_pos_src = np.array([0.3, 0.2, 2.5])
     camera_target = np.array([0, 0, 0])
     
     src_cloud = crop_pointcloud_fov_hpr(src_mesh_sample, camera_pos_src, camera_target, fov_deg=60.0)
@@ -83,8 +83,8 @@ def main():
     # 2. Preprocessing
     print("\n2. Preprocessing...")
     start = time.time()
-    src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, 200)
-    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 200)
+    src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, 2000)
+    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 2000)
     timer_print(start, "Downsampling & features")
     
     print(f"  Downsampled to {len(src_down.points)} and {len(dst_down.points)} points")

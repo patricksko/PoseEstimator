@@ -88,11 +88,6 @@ def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     
     pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image, intrinsic)
 
-    # Transform coordinate system
-    # pcd.transform([[1, 0, 0, 0],
-    #                [0, -1, 0, 0],
-    #                [0, 0, -1, 0],
-    #                [0, 0, 0, 1]])
     
     # Remove outliers
     if len(pcd.points) > 0:
@@ -185,7 +180,7 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
     for dist_thresh in [distance_threshold, distance_threshold*2, distance_threshold*0.5]:
         result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
             pcd1_down, pcd2_down, fpfh1, fpfh2,
-            mutual_filter=True,
+            mutual_filter=False,
             max_correspondence_distance=dist_thresh,
             estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
             ransac_n=3,  # Reduced from 4
@@ -383,12 +378,19 @@ def crop_pointcloud_fov_hpr(pcd, camera_position=np.array([0, 0, -1]),
     cos_angles = np.dot(dirs, cam_dir)
     mask_fov = cos_angles > np.cos(np.deg2rad(fov_deg) / 2)
     pcd_fov = pcd.select_by_index(np.where(mask_fov)[0])
+    o3d.visualization.draw_geometries([
+        pcd_fov.paint_uniform_color([0, 1, 1]),
+        #dst_cloud.paint_uniform_color([0, 1, 0])
+    ], window_name="FOV")
 
     # Now apply Hidden Point Removal to simulate occlusion
-    radius = np.linalg.norm(np.asarray(pcd_fov.points) - camera_position, axis=1).max() * 1.5
+    radius = np.linalg.norm(np.asarray(pcd_fov.points) - camera_position, axis=1).max() * 3
     _, pt_map = pcd_fov.hidden_point_removal(camera_position, radius)
     pcd_visible = pcd_fov.select_by_index(pt_map)
-
+    o3d.visualization.draw_geometries([
+            pcd_visible.paint_uniform_color([0, 1, 1]),
+            #dst_cloud.paint_uniform_color([0, 1, 0])
+        ], window_name="Visible")
     return pcd_visible
 
 

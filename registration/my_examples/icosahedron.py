@@ -5,24 +5,28 @@ import cv2
 import os
 
 def look_at(eye, target, up=np.array([0, 1, 0])):
+    """
+    Try different camera conventions to match BlenderProc
+    """
     forward = target - eye
     forward /= np.linalg.norm(forward)
 
     # Right vector
-    right = np.cross(forward, up)  # note: forward × up
+    right = np.cross(forward, up)
     right /= np.linalg.norm(right)
 
-    # True up vector
-    true_up = np.cross(right, forward)  # right × forward
+    # True up vector  
+    true_up = np.cross(right, forward)
     true_up /= np.linalg.norm(true_up)
 
-    # Build matrix
+    # Try BlenderProc convention - Option 1: Standard right-handed with -Z forward
     mat = np.eye(4)
     mat[:3, 0] = right
     mat[:3, 1] = true_up
-    mat[:3, 2] = -forward  # camera looks along -Z
+    mat[:3, 2] = -forward  # Z points away from target (towards camera)
     mat[:3, 3] = eye
     return mat
+
 
 def get_axis_aligned_camera_positions(distance=0.3):
     """
@@ -105,6 +109,22 @@ def get_axis_aligned_camera_positions(distance=0.3):
         })
     
     return positions  # Total: 26 positions
+def convert_to_opencv_convention(opengl_pose):
+    """
+    Convert OpenGL camera pose to Blender camera convention
+    Blender cameras: X=right, Y=down, Z=forward (towards target)
+    """
+    # Transformation matrix to convert from OpenGL to Blender camera convention
+    # OpenGL: X=right, Y=up, Z=back
+    # Blender: X=right, Y=down, Z=forward
+    conversion_matrix = np.array([
+        [1,  0,  0,  0],  # X stays the same
+        [0, -1,  0,  0],  # Y flips (up -> down)
+        [0,  0, -1,  0],  # Z flips (back -> forward)
+        [0,  0,  0,  1]
+    ])
+    
+    return conversion_matrix @ opengl_pose
 
 def create_camera_frame(length=0.05):
     """
@@ -231,7 +251,9 @@ for i, cam_pos in enumerate(camera_positions):
     np.save(os.path.join(output_dir, depth_filename), depth)
     
     # Save pose and camera parameters for point cloud reconstruction
-    cam_pose_mm = cam_pose.copy()
+    cam_pose_opengl = cam_pose.copy()  # This is what pyrender uses
+    cam_pose_blender = convert_to_opencv_convention(cam_pose_opengl)  # Convert to Blender
+    cam_pose_mm = cam_pose_blender.copy()
     cam_pose_mm[:3, 3] *= 1000.0  # scale translation from m to mm
 
     pose_filename = f"pose_{i:02d}_{cam_pos['type']}.npy"
@@ -250,14 +272,7 @@ for i, cam_pos in enumerate(camera_positions):
     }
     np.save(os.path.join(output_dir, pose_filename), camera_data)
     
-    print(f"Saved view {i:02d} ({cam_pos['type']}): eye={cam_pos['eye']}")
-
-print(f"\nAll views saved to: {output_dir}")
-print("\nCamera positions are now axis-aligned:")
-print("- Face views: cameras perpendicular to cube faces")
-print("- Edge views: cameras aligned with cube edges") 
-print("- Corner views: cameras pointing at cube corners")
-print("- All angles respect the block's 90-degree geometry")
+   
 
 
 

@@ -38,7 +38,7 @@ num_targets = json_config['dataset']['num_targets']
 bproc.init()
 
 # load bop objects into the scene
-target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock'), model_type = 'cad', object_model_unit='mm')
+target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock_full'), model_type = 'cad', object_model_unit='mm')
 # SOLUTION 1: Set all Lego blocks to have the same category_id
 # This ensures they're treated as the same class
 LEGO_CLASS_ID = 1  # Single class ID for all Lego blocks
@@ -215,12 +215,12 @@ for i in range(num_scenes):
         obj2world_dict[obj.get_name()] = T_obj2world.tolist()
 
     # save to file
-    with open(Path(output_dir) / f"scene_{i:06d}_obj2world.json", "w") as f:
-        json.dump(obj2world_dict, f, indent=2)
+    # with open(Path(output_dir) / f"scene_{i:06d}_obj2world.json", "w") as f:
+    #     json.dump(obj2world_dict, f, indent=2)
     # Write data in bop format
     bproc.writer.write_bop(os.path.join(output_dir, 'bop_data'),
                            target_objects = sampled_target_bop_objs,
-                           dataset = 'Legoblock',
+                           dataset = 'Legoblock_full',
                            depth_scale = 0.1,
                            depths = data["depth"],
                            colors = data["colors"], 

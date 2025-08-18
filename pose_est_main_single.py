@@ -61,7 +61,7 @@ if __name__ == "__main__":
     
     gt_data = "./data/scene_gt.json"
     # #Read CAD Path
-    cad_path = "./data/lego_views/pcd_06_edge.ply"
+    cad_path = "./data/lego_views/pointcloud_14_edge.ply"
     src_cloud = o3d.io.read_point_cloud(cad_path)
     dst_cloud = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
     if dst_cloud is None or len(dst_cloud.points) == 0:
@@ -71,8 +71,8 @@ if __name__ == "__main__":
     # 1. Preprocessing
     print("\n 1. Preprocessing")
     start = time.time()
-    src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, 200)
-    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 200)
+    src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, 50)
+    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 50)
     timer_print(start, "Downsampling & features")
     
     print(f"  Downsampled to {len(src_down.points)} and {len(dst_down.points)} points")
@@ -80,7 +80,6 @@ if __name__ == "__main__":
     # 2. Find correspondences
     correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=0.5)
     timer_print(start, "Correspondence search")
-    
     print(f"  Found {len(correspondences)} correspondences")
     
     if len(correspondences) < 3:
@@ -98,7 +97,7 @@ if __name__ == "__main__":
     quality = "Good" if inlier_ratio > 0.7 else "Moderate" if inlier_ratio > 0.4 else "Poor"
     
     print(f"  Inliers: {num_inliers}/{len(correspondences)} ({inlier_ratio:.2f}) - {quality} fit")
-    
+ 
     # 5. ICP refinement
     print("\n5. ICP refinement...")
     start = time.time()
@@ -121,9 +120,9 @@ if __name__ == "__main__":
     # ], window_name="Original Point Clouds")
     
     # Correspondences
-    if len(correspondences) > 0:
-        print("  Showing correspondences")
-        visualize_correspondences(src_down, dst_down, correspondences)
+    # if len(correspondences) > 0:
+    #     print("  Showing correspondences")
+    #     visualize_correspondences(src_down, dst_down, correspondences)
     
     # TEASER++ result
     print("  Showing TEASER++ result (Blue: Aligned, Green: Target)")
@@ -145,12 +144,14 @@ if __name__ == "__main__":
     
     print(f"\n{Fore.GREEN}Registration pipeline completed!{Style.RESET_ALL}")
 
-    # 8. Pose estimation
-    data = np.load("./data/lego_views/pose_06_edge.npy", allow_pickle=True).item()
-
-    pose = data["pose"]  # This is the 4×4 matrix
     
-    T_m2c_est = T_icp @ np.linalg.inv(pose)
+    T_m2c_est = T_icp
+    R_m2c_est = np.array(T_m2c_est[:3, :3]).reshape(3, 3)
+    t_m2c_est = np.array(T_m2c_est[:3, 3]).reshape(3) * 1000.0  # <-- mm → m
+
+    T_m2c_est = np.eye(4)
+    T_m2c_est[:3, :3] = R_m2c_est
+    T_m2c_est[:3, 3] = t_m2c_est
     R_m2c_est = T_m2c_est[:3, :3]
     gt_data = "./data/scene_gt.json"
     
@@ -174,25 +175,6 @@ if __name__ == "__main__":
     T_m2c[:3, :3] = R
     T_m2c[:3, 3] = t[:, 0]  # flatten column vector into row
 
-    # gt_cam = "./data/scene_camera.json"
-    # # Read JSON file
-    # with open(gt_cam, "r") as f:
-    #     data = json.load(f)
-
-    # # Take the first image/frame entry
-    # first_obj = data["0"]
-
-    # # Extract rotation and translation
-    # R_list = first_obj["cam_R_w2c"]
-    # t_list = first_obj["cam_t_w2c"]
-
-    # # Convert to numpy arrays
-    # R_cam = np.array(R_list).reshape(3, 3)
-    # t_cam = np.array(t_list).reshape(3, 1)
-
-    # T_w2c = np.eye(4)
-    # T_w2c[:3, :3] = R_cam
-    # T_w2c[:3, 3] = t_cam[:, 0]  # flatten column vector into row
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.set_xlim([-1,1])
