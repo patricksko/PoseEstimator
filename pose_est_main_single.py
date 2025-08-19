@@ -48,9 +48,6 @@ def plot_frame(ax, R, origin=[0,0,0], label='Frame', length=1.0):
     ax.plot([origin[0], y_axis[0]], [origin[1], y_axis[1]], [origin[2], y_axis[2]], 'g', label=f'{label}-Y')
     ax.plot([origin[0], z_axis[0]], [origin[1], z_axis[1]], [origin[2], z_axis[2]], 'b', label=f'{label}-Z')
 if __name__ == "__main__":
-
-    #Read CAD Path
-    cad_path = "/home/skoumal/dev/TEASER-plusplus/build/python/lego_views/"
     
     weights = "./data/best.pt"
     rgb_path = "./data/000000.jpg"
@@ -61,7 +58,7 @@ if __name__ == "__main__":
     
     gt_data = "./data/scene_gt.json"
     # #Read CAD Path
-    cad_path = "./data/lego_views/pointcloud_14_edge.ply"
+    cad_path = "./data/lego_views/pointcloud_06_edge_short_top.ply"
     src_cloud = o3d.io.read_point_cloud(cad_path)
     dst_cloud = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
     if dst_cloud is None or len(dst_cloud.points) == 0:
@@ -71,8 +68,8 @@ if __name__ == "__main__":
     # 1. Preprocessing
     print("\n 1. Preprocessing")
     start = time.time()
-    src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, 50)
-    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 50)
+    src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, 100)
+    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 100)
     timer_print(start, "Downsampling & features")
     
     print(f"  Downsampled to {len(src_down.points)} and {len(dst_down.points)} points")

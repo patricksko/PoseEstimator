@@ -62,10 +62,7 @@ if __name__ == "__main__":
     cad_path = "./data/obj_000001.ply"
     # 1. Load model point cloud
     src = o3d.io.read_point_cloud(cad_path)
-    T_cv2ogl = np.array([[1, 0, 0, 0],
-                     [0,-1, 0, 0],
-                     [0, 0,-1, 0],
-                     [0, 0, 0, 1]])
+   
     # src = src.transform(np.linalg.inv(T_cv2ogl))
     # 2. Load scene point cloud (already reconstructed from depth)
     dst = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)

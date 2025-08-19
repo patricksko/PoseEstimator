@@ -11,11 +11,22 @@ from EstimHelpers.detection_utils import detect_mask
 import cv2 
 import matplotlib.pyplot as plt
 
+def get_angular_error(R_exp, R_est):
+    """Calculate angular error in radians"""
+    return abs(np.arccos(min(max(((np.matmul(R_exp.T, R_est)).trace() - 1) / 2, -1.0), 1.0)))
+
+def plot_frame(ax, R, origin=[0,0,0], label='Frame', length=1.0):
+    """Plot a 3D coordinate frame given a rotation matrix R and origin."""
+    origin = np.array(origin)
+    x_axis = origin + R[:,0] * length
+    y_axis = origin + R[:,1] * length
+    z_axis = origin + R[:,2] * length
+    
+    ax.plot([origin[0], x_axis[0]], [origin[1], x_axis[1]], [origin[2], x_axis[2]], 'r', label=f'{label}-X')
+    ax.plot([origin[0], y_axis[0]], [origin[1], y_axis[1]], [origin[2], y_axis[2]], 'g', label=f'{label}-Y')
+    ax.plot([origin[0], z_axis[0]], [origin[1], z_axis[1]], [origin[2], z_axis[2]], 'b', label=f'{label}-Z')
 if __name__ == "__main__":
 
-    #Read CAD Path
-    cad_path = "/home/skoumal/dev/TEASER-plusplus/build/python/lego_views/"
-    
     weights = "./data/best.pt"
     rgb_path = "./data/000000.jpg"
     depth_path = "./data/000000.png"
@@ -24,52 +35,58 @@ if __name__ == "__main__":
     mask = detect_mask(weights, rgb_path)
     
     gt_data = "./data/scene_gt.json"
+
     # #Read CAD Path
     cad_path = "./data/lego_views/"
+
     ply_files = sorted(glob.glob(os.path.join(cad_path, "*.ply")))
 
-    pointclouds = []
+    src_clouds = []
     for ply_file in ply_files:
-        pcd = o3d.io.read_point_cloud(ply_file)
-        pointclouds.append(pcd)
-        print(f"Loaded: {ply_file} with {len(pcd.points)} points")
+        src = o3d.io.read_point_cloud(ply_file)
+        src_clouds.append(src)
+        print(f"Loaded: {ply_file} with {len(src.points)} points")
     
 
-    scene_pcd = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
-    if scene_pcd is None or len(scene_pcd.points) == 0:
+    dst_cloud = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
+    if dst_cloud is None or len(dst_cloud.points) == 0:
             print("Failed to generate scene point cloud!")
             exit(1)
 
-    o3d.visualization.draw_geometries([
-        scene_pcd.paint_uniform_color([1, 0, 0]),
-        pointclouds[8].paint_uniform_color([0, 1, 0])
-    ])
-    
     
     
     start_time = time.time()
-    best_idx, best_transform, best_inliers, all_metrics = find_best_template_teaser(scene_pcd, pointclouds, target_points=100)
-    
+    best_idx, H, best_inliers, all_metrics = find_best_template_teaser(dst_cloud, src_clouds, target_points=100)
+    print("="*50)
+    for m in all_metrics:
+        print(f"Template {m['template_idx']}: Chamfer = {m['chamfer']:.6f}")
+
     # Apply final transformation
     if best_idx >= 0:
-        final_template = copy.deepcopy(pointclouds[best_idx])
-        final_template.transform(best_transform)
+        src_cloud = copy.deepcopy(src_clouds[best_idx])
+        src_cloud.transform(H)
         
-    scale_ratio = 1
-    cad_pcd = final_template
-    end_time=time.time()
-    coord_transform = np.array([[1, 0, 0, 0],
-                           [0, -1, 0, 0],
-                           [0, 0, -1, 0],
-                           [0, 0, 0, 1]])
+    # 7. Visualization
+    print("\n7. Visualization...")
+  
+  
+    o3d.visualization.draw_geometries([
+        src_cloud.paint_uniform_color([0, 1, 1]),
+        dst_cloud.paint_uniform_color([0, 1, 0])
+    ], window_name="ICP Refined Registration")
+    
 
-    # Object pose in standard camera coordinates
-    standard_camera_pose = np.linalg.inv(coord_transform) @ best_transform @ coord_transform
-    print(end_time-start_time)
-    print("----------------------------")
-    #cad_aligned = try_manual_alignment(cad_pcd, scene_pcd, scale_ratio)
-    o3d.visualization.draw_geometries([scene_pcd.paint_uniform_color([1, 0, 0]),
-                                        cad_pcd.paint_uniform_color([0, 1, 0])])
+    
+    T_m2c_est = H
+    R_m2c_est = np.array(T_m2c_est[:3, :3]).reshape(3, 3)
+    t_m2c_est = np.array(T_m2c_est[:3, 3]).reshape(3) * 1000.0  # <-- mm → m
+
+    T_m2c_est = np.eye(4)
+    T_m2c_est[:3, :3] = R_m2c_est
+    T_m2c_est[:3, 3] = t_m2c_est
+    R_m2c_est = T_m2c_est[:3, :3]
+    gt_data = "./data/scene_gt.json"
+    
     # Read JSON file
     with open(gt_data, "r") as f:
         data = json.load(f)
@@ -86,21 +103,34 @@ if __name__ == "__main__":
     R = np.array(R_list).reshape(3, 3)
     t = np.array(t_list).reshape(3, 1)
 
-    R_est = best_transform[:3, :3]
-    t_est = best_transform[:3, 3:]
+    T_m2c = np.eye(4)
+    T_m2c[:3, :3] = R
+    T_m2c[:3, 3] = t[:, 0]  # flatten column vector into row
 
-    print("Groundtruth Rotation")
-    print(R)
-    print("Estimated Rotation")
-    print(R_est)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlim([-1,1])
+    ax.set_ylim([-1,1])
+    ax.set_zlim([-1,1])
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title('Rotation Matrices in 3D')
 
-    print("Groundtruth Translation")
-    print(t)
-    print("Estimated Translation")
-    print(t_est)
+    # Plot the frames
+    plot_frame(ax, R, origin=[0,0,0], label='R')
+    plot_frame(ax, R_m2c_est, origin=[0,0,0.5], label='R_m2c')
+    plt.show()
+
+    print("Homogeneous Transformation:\n", T_m2c)
+    print("Estimated: ", T_m2c_est)
+    print("Difference = ", get_angular_error(R, R_m2c_est))
 
 
-    np.savetxt("finaltransform.txt", best_transform, fmt="%.6f")
+        
+
+ 
+
 
 
     

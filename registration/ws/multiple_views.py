@@ -139,6 +139,75 @@ def get_axis_aligned_camera_positions(distance=0.3):
         })
     
     return positions  # Total: 26 positions
+def get_reduced_camera_positions(distance=0.3):
+    """
+    Generate 11 unique camera positions for a Lego block with axes:
+    - Y: up (top/bottom)
+    - X: long side
+    - Z: short side
+    """
+    positions = []
+
+    # --- Faces (4) ---
+    face_dirs = [
+        (np.array([0,  1,  0]), '0'),
+        (np.array([0, -1,  0]), '1'),
+    ]
+    for d, name in face_dirs:
+        positions.append({
+            'eye': d * distance,
+            'target': np.array([0, 0, 0]),
+            'up': np.array([0, 0, 1]),  # Y is up
+            'type': name
+        })
+
+    face_dirs = [
+        (np.array([1,  0,  0]), '2'),
+        (np.array([0,  0,  1]), '3')
+    ]
+    for d, name in face_dirs:
+        positions.append({
+            'eye': d * distance,
+            'target': np.array([0, 0, 0]),
+            'up': np.array([0, 1, 0]),  # Y is up
+            'type': name
+        })
+    # --- Edges (4) ---
+    edge_dirs = [
+        (np.array([ 1,  1, 0]), '4'),
+        (np.array([ 1, -1, 0]), '5'),
+        (np.array([ 0,  1, 1]), '6'),
+        (np.array([ 0, -1, 1]), '7'),
+        (np.array([ 1, 0, 1]), '8'),
+        (np.array([ 1, 0, -1]), '9')
+    ]
+    for d, name in edge_dirs:
+        d = d / np.linalg.norm(d)
+        positions.append({
+            'eye': d * distance,
+            'target': np.array([0, 0, 0]),
+            'up': np.array([0, 1, 0]),
+            'type': name
+        })
+
+    # --- Corners (3) ---
+    corner_dirs = [
+        (np.array([ 1,  1, -1]), '10'),
+        (np.array([ 1,  1,  1]), '11'),
+        (np.array([ 1, -1,  1]), '12'),
+        (np.array([ 1, -1, -1]), '13')
+    ]
+    for d, name in corner_dirs:
+        d = d / np.linalg.norm(d)
+        positions.append({
+            'eye': d * distance,
+            'target': np.array([0, 0, 0]),
+            'up': np.array([0, 1, 0]),
+            'type': name
+        })
+
+    return positions  # total: 14
+
 
 def sample_mesh_points(mesh, num_points=50000):
     """Sample points from mesh surface"""
@@ -180,7 +249,7 @@ def render_lego_views():
     os.makedirs(output_dir, exist_ok=True)
     
     # Get camera positions
-    camera_positions = get_axis_aligned_camera_positions(distance=0.3)
+    camera_positions = get_reduced_camera_positions(distance=0.3)
     
     print(f"Generating {len(camera_positions)} views:")
     print(f"- {sum(1 for p in camera_positions if p['type'] == 'face')} face views")
