@@ -18,12 +18,35 @@ This end-to-end pipeline leverages synthetic data and state-of-the-art methods t
 # Install
 We recommend using **Conda** to create an isolated environment.
 
-1. Create and activate a new Conda environment with Python 3.10:
+## 1. Create and activate a new Conda environment (Python 3.10)
 
+### Linux / macOS / Windows
 ```bash
 conda create -n pose_estimator_env python=3.10 -y
 conda activate pose_estimator_env
 ```
+
+## 2. Install dependencies
+You can install the required Python packages in two ways
+### Option A - Using ```requirements.txt```
+```bash
+pip install -r requirements.txt
+```
+### Option B - Using ```conda_env.yaml```
+This will reproduce the environment exactly as specified:
+```bash
+conda env create -f conda_env.yaml
+conda activate pose_estimator_env
+```
+If you already created the environment manually in Step 1 and just want to update it with the ```conda_env.yaml``` file:
+```bash
+conda env update -n pose_estimator_env -f conda_env.yaml --prune
+```
+## Notes
+Use **Option A** if you just want to install Python Packages quickly.
+Use **Option B** if you want reproducibility across machines.
+
+
 
 ```bash
 conda env create -f conda_env.yaml
