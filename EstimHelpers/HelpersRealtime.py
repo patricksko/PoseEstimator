@@ -3,6 +3,7 @@ import cv2
 import open3d as o3d
 import pyrealsense2 as rs
 from teaserpp_python import _teaserpp as tpp
+import copy
 
 
 
@@ -13,7 +14,7 @@ def uniform_downsample_farthest_point(pcd, target_points=2000):
     """
     points = np.asarray(pcd.points)
     n_points = len(points)
-    print(f"Number of points: {n_points}, target: {target_points}")
+    #print(f"Number of points: {n_points}, target: {target_points}")
 
     target_points = int(target_points)
     if n_points <= target_points:
@@ -56,11 +57,11 @@ def preprocess_point_cloud_uniform(pcd, target_points=500):
         print("Empty point cloud!")
         return None, None
         
-    print(f"Original points: {len(pcd.points)}")
+    #print(f"Original points: {len(pcd.points)}")
 
     pcd_down = uniform_downsample_farthest_point(pcd, target_points)
     
-    print(f"Downsampled points: {len(pcd_down.points)}")
+    #print(f"Downsampled points: {len(pcd_down.points)}")
     
     # Ensure we have enough points for feature computation
     if len(pcd_down.points) < 10:
@@ -81,7 +82,7 @@ def preprocess_point_cloud_uniform(pcd, target_points=500):
         o3d.geometry.KDTreeSearchParamHybrid(radius=radius*2.5, max_nn=100)
     )
     
-    print(f"FPFH feature dimension: {fpfh.dimension()}")
+    #print(f"FPFH feature dimension: {fpfh.dimension()}")
     return pcd_down, fpfh
 
 
@@ -107,41 +108,6 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
     return result.correspondence_set
 
 
-
-
-import copy
-def visualize_correspondences(src_down, dst_down, correspondences, offset=(0.1,0,0)):
-    """
-    Visualize correspondences between two point clouds in Open3D.
-    """
-    src_temp = copy.deepcopy(src_down)
-    dst_temp = copy.deepcopy(dst_down)
-
-    src_temp = src_temp.translate((0, 0, 0))
-    dst_temp = dst_temp.translate(offset)  # Shift for visibility
-
-    # Create lines connecting corresponding points
-    lines = []
-    colors = []
-    for (src_idx, dst_idx) in correspondences:
-        lines.append([src_idx, len(src_down.points) + dst_idx])
-        colors.append([0, 0, 1])  # blue lines
-
-    # Merge both clouds into a single point cloud for LineSet indexing
-    merged_points = np.vstack((np.asarray(src_temp.points), np.asarray(dst_temp.points)))
-    line_set = o3d.geometry.LineSet(
-        points=o3d.utility.Vector3dVector(merged_points),
-        lines=o3d.utility.Vector2iVector(lines)
-    )
-    line_set.colors = o3d.utility.Vector3dVector(colors)
-
-    src_temp.paint_uniform_color([1, 0, 0])
-    dst_temp.paint_uniform_color([0, 1, 0])
-
-    o3d.visualization.draw_geometries([src_temp, dst_temp, line_set])
-
-
-
 def run_teaser(source, target, correspondences):
     if len(correspondences) < 3:
         return np.eye(4), []
@@ -162,9 +128,9 @@ def run_teaser(source, target, correspondences):
     solver.solve(src_corr, tgt_corr)
     sol = solver.getSolution()
     
-    R_inliers = solver.getRotationInliers()
-    s_inliers = solver.getScaleInliers()
-    t_inliers = solver.getTranslationInliers()
+    # R_inliers = solver.getRotationInliers()
+    # s_inliers = solver.getScaleInliers()
+    # t_inliers = solver.getTranslationInliers()
     R = np.array(sol.rotation)
     t = np.array(sol.translation).reshape((3, 1))
     
@@ -172,7 +138,7 @@ def run_teaser(source, target, correspondences):
     T[:3, :3] = R
     T[:3, 3:] = t
     
-    return T, R_inliers, s_inliers, t_inliers
+    return T#, R_inliers, s_inliers, t_inliers
 def chamfer_distance(src, dst):
     """Compute symmetric Chamfer distance between two Open3D clouds"""
     src_pts = np.asarray(src.points)
@@ -192,14 +158,18 @@ def chamfer_distance(src, dst):
 
 
 
-def detect_mask(model, img_bgr, class_id=0, conf=0.6, imgsz=512):
+def detect_mask(model, img_bgr, class_id=0, conf=0.8, imgsz=512):
     h, w = img_bgr.shape[:2]
     mask = np.zeros((h, w), dtype=np.uint8)
     results = model(source=img_bgr, imgsz=imgsz, conf=conf, device="0", save=False, verbose=False)
+    # if results[0].boxes is None or len(results[0].boxes) == 0:
+    #     print("No bounding boxes detected. Exiting...")
+    #     exit()  # or return if inside a function
     for r in results:
         if not hasattr(r, "masks") or r.masks is None:
             continue
         for seg, cls in zip(r.masks.xy, r.boxes.cls):
+            
             if int(cls) != class_id: 
                 continue
             poly = np.array(seg, dtype=np.int32)
@@ -229,39 +199,36 @@ def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
     all_metrics = []
     
     for idx, src_cloud in enumerate(src_clouds):
-        # o3d.visualization.draw_geometries([
-        #     src_cloud.paint_uniform_color([0, 1, 1]),
-        # ], window_name="Template")
         src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, target_points)
         if src_down is None:
             continue
         
         correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh)
-        H, R_inliers, s_inliers, t_inliers = run_teaser(src_down, dst_down, correspondences)
+        H = run_teaser(src_down, dst_down, correspondences)
         
         # # --- NEW: ICP refinement ---
-        icp_result = o3d.pipelines.registration.registration_icp(
-            src_cloud, dst_cloud, 0.01, H,
-            o3d.pipelines.registration.TransformationEstimationPointToPoint()
-        )
-        refined_transform = icp_result.transformation
+        # icp_result = o3d.pipelines.registration.registration_icp(
+        #     src_cloud, dst_cloud, 0.01, H,
+        #     o3d.pipelines.registration.TransformationEstimationPointToPoint()
+        # )
+        # refined_transform = icp_result.transformation
         
-        src_aligned = copy.deepcopy(src_cloud).transform(refined_transform)
+        src_aligned = copy.deepcopy(src_cloud).transform(H)
         score = chamfer_distance(src_aligned, dst_cloud)
         
-        metrics = {
-            "template_idx": idx,
-            "num_corr": len(correspondences),
-            "num_inliers": len(R_inliers or []),
-            "icp_fitness": icp_result.fitness,
-            "icp_rmse": icp_result.inlier_rmse,
-            "chamfer": score
-        }
-        all_metrics.append(metrics)
+        # metrics = {
+        #     "template_idx": idx,
+        #     "num_corr": len(correspondences),
+        #     # "num_inliers": len(R_inliers or []),
+        #     # "icp_fitness": icp_result.fitness,
+        #     # "icp_rmse": icp_result.inlier_rmse,
+        #     "chamfer": score
+        # }
+        # all_metrics.append(metrics)
         
         if score < best_score:  
             best_score = score
             best_idx = idx
             best_transform = H
     
-    return best_idx, best_transform, best_score, all_metrics
+    return best_idx, best_transform, dst_down, dst_fpfh

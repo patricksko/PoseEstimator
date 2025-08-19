@@ -280,6 +280,20 @@ def chamfer_distance(src, dst):
         d_dst.append(np.sqrt(d[0]))
     return np.mean(d_src) + np.mean(d_dst)
 
+def is_y_up_camera(H, tol_deg=20):
+    """
+    Check if model's +Y axis points upwards relative to camera frame.
+    In camera convention: +Y is down, so "up" = [0, -1, 0].
+    """
+    cam_up = [0,1,0]
+    R = H[:3, :3]
+    R_inv = np.linalg.inv(R)
+    model_y_cam = R_inv[:, 1] / (np.linalg.norm(R_inv[:, 1]))
+    cosang = float(np.clip(np.dot(model_y_cam, cam_up), -1.0, 1.0))
+    angle = np.degrees(np.arccos(cosang))
+    print("="*100)
+    return angle <= tol_deg, angle
+
 def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
     dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, target_points)
     
@@ -287,6 +301,7 @@ def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
     best_idx = -1
     best_transform = np.eye(4)
     all_metrics = []
+    tol_deg = 20
     
     for idx, src_cloud in enumerate(src_clouds):
         # o3d.visualization.draw_geometries([
@@ -299,22 +314,23 @@ def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
         correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh)
         H, R_inliers, s_inliers, t_inliers = run_teaser(src_down, dst_down, correspondences)
         
-        # # --- NEW: ICP refinement ---
-        icp_result = o3d.pipelines.registration.registration_icp(
-            src_cloud, dst_cloud, 0.01, H,
-            o3d.pipelines.registration.TransformationEstimationPointToPoint()
-        )
-        refined_transform = icp_result.transformation
+        # # # --- NEW: ICP refinement ---
+        # icp_result = o3d.pipelines.registration.registration_icp(
+        #     src_cloud, dst_cloud, 0.01, H,
+        #     o3d.pipelines.registration.TransformationEstimationPointToPoint()
+        # )
+        # refined_transform = icp_result.transformation
         
-        src_aligned = copy.deepcopy(src_cloud).transform(refined_transform)
+        src_aligned = copy.deepcopy(src_cloud).transform(H)
         score = chamfer_distance(src_aligned, dst_cloud)
-        
+        # Check Y-up physics constraint
+        #y_ok, angle = is_y_up_camera(H, tol_deg=tol_deg)
         metrics = {
             "template_idx": idx,
             "num_corr": len(correspondences),
             "num_inliers": len(R_inliers or []),
-            "icp_fitness": icp_result.fitness,
-            "icp_rmse": icp_result.inlier_rmse,
+            # "icp_fitness": icp_result.fitness,
+            # "icp_rmse": icp_result.inlier_rmse,
             "chamfer": score
         }
         all_metrics.append(metrics)
@@ -325,34 +341,6 @@ def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
             best_transform = H
     
     return best_idx, best_transform, best_score, all_metrics
-
-
-def try_manual_alignment(cad_pcd, scene_pcd, scale_ratio):
-    """Try manual initial alignment based on centroids, scale, and PCA rotation"""
-    print("\n=== TRYING MANUAL ALIGNMENT ===")
-
-    cad_aligned = copy.deepcopy(cad_pcd)
-
-    # 1. Center both point clouds
-    cad_center = cad_aligned.get_center()
-    scene_center = scene_pcd.get_center()
-    cad_aligned.translate(-cad_center)
-    cad_aligned.translate(scene_center)
-
-    # 2. Scale
-    if abs(scale_ratio - 1.0) > 0.1:
-        print(f"Applying scale factor: {scale_ratio:.3f}")
-        cad_aligned.scale(scale_ratio, center=scene_center)
-
- 
-    
-    return cad_aligned
-
-def center_pointcloud(pcd):
-    """Center pointcloud at origin"""
-    centered = pcd.translate(-pcd.get_center())
-    return centered
-
 
 
 def crop_pointcloud_fov(pcd, fov_deg=60.0, look_dir=np.array([0, 0, 1])):

@@ -11,6 +11,7 @@ from EstimHelpers.detection_utils import detect_mask
 import cv2 
 import matplotlib.pyplot as plt
 
+
 def get_angular_error(R_exp, R_est):
     """Calculate angular error in radians"""
     return abs(np.arccos(min(max(((np.matmul(R_exp.T, R_est)).trace() - 1) / 2, -1.0), 1.0)))
@@ -69,7 +70,6 @@ if __name__ == "__main__":
     # 7. Visualization
     print("\n7. Visualization...")
   
-  
     o3d.visualization.draw_geometries([
         src_cloud.paint_uniform_color([0, 1, 1]),
         dst_cloud.paint_uniform_color([0, 1, 0])
@@ -119,7 +119,7 @@ if __name__ == "__main__":
 
     # Plot the frames
     plot_frame(ax, R, origin=[0,0,0], label='R')
-    plot_frame(ax, R_m2c_est, origin=[0,0,0.5], label='R_m2c')
+    plot_frame(ax, R_m2c_est, origin=[0,0,2], label='R_m2c')
     plt.show()
 
     print("Homogeneous Transformation:\n", T_m2c)
