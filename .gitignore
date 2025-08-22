@@ -9,7 +9,7 @@ blender
 output/
 debug/
 datageneration/Blenderproc/resources/*
-datageneration/Blenderproc/output_blenderproc_full/*
+datageneration/Blenderproc/output/*
 detection/YOLO/output_runs/*
 *.blend1
 .vscode

@@ -3,9 +3,9 @@
     "blenderproc_seed": "69",
     "draw_bbox": true,
   
-    "bop_path": "../resources/Object_Data",
-    "cc_textures_path": "../resources/cc_textures",
-    "save_path": "../output_blenderproc_new",
+    "bop_path": "./resources/Object_Data",
+    "cc_textures_path": "./resources/cc_textures",
+    "save_path": "./output_blenderproc_video",
     "camera": {
       "px": 600,
       "py": 600,
@@ -48,6 +48,7 @@
       "pose": true,
       "detection": true,
       "empty_images_per_scene": 0,
-      "texture_ratio": 0.9
+      "texture_ratio": 0.9,
+      "num_frames" : 100
     }
   }

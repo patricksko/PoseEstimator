@@ -91,7 +91,7 @@ def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     
     # Remove outliers
     if len(pcd.points) > 0:
-        pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+        pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
     
     return pcd
 

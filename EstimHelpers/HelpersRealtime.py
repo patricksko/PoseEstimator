@@ -192,6 +192,10 @@ def o3d_intrinsics_from_rs(intr):
 
 def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
     dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, target_points)
+    dst_down, ind = dst_down.remove_statistical_outlier(
+                    nb_neighbors=20,      # number of neighbors to analyze
+                    std_ratio=2.0         # threshold: smaller = more aggressive
+                )
     
     best_score = float("inf")
     best_idx = -1
@@ -232,3 +236,70 @@ def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
             best_transform = H
     
     return best_idx, best_transform, dst_down, dst_fpfh
+
+
+
+
+
+def fx_from_fov(fov_deg, width):
+    return 0.5 * width / np.tan(np.deg2rad(fov_deg) / 2.0)
+
+
+def camera_eye_lookat_up_from_H(H):
+    """
+    Convert model→camera H to eye/target/up in model/world coords.
+    - eye: camera center
+    - target: eye + forward vector
+    - up: image up
+    """
+    R = H[:3, :3]
+    t = H[:3, 3]
+
+    # camera center in world
+    eye = -R.T @ t
+
+    # camera axes in world
+    forward = R.T @ np.array([0, 0, 1.0])   # camera +Z
+    up      = R.T @ np.array([0, -1.0, 0.0])  # screen up
+
+    target = eye + forward
+    up = up / (np.linalg.norm(up) + 1e-12)
+    return eye, target, up
+
+
+def crop_pointcloud_fov_hpr(pcd, camera_position=np.array([0, 0, -1]),
+                           camera_lookat=np.array([0, 0, 0]),
+                           fov_deg=60.0, radius_scale=100.0):
+    """
+    FOV + Hidden Point Removal (robust radius).
+    radius_scale: increase if you still see over-pruning (typical 20–200).
+    """
+    # View direction
+    cam_dir = camera_lookat - camera_position
+    cam_dir /= (np.linalg.norm(cam_dir) + 1e-12)
+
+    # Angular FoV prefilter
+    pts = np.asarray(pcd.points)
+    vecs = pts - camera_position
+    dist = np.linalg.norm(vecs, axis=1)
+    safe_dist = np.maximum(dist, 1e-8)
+    dirs = vecs / safe_dist[:, None]
+    cos_angles = np.dot(dirs, cam_dir)
+    mask_fov = cos_angles > np.cos(np.deg2rad(fov_deg) / 2.0)
+    idx_fov = np.where(mask_fov)[0]
+    if idx_fov.size == 0:
+        return o3d.geometry.PointCloud()  # nothing in FoV
+
+    pcd_fov = pcd.select_by_index(idx_fov)
+
+    # --- Robust radius choice ---
+    # Use the maximum distance in the *full* cloud as a baseline to avoid local underestimation
+    max_dist_full = (np.linalg.norm(pts - camera_position, axis=1).max()
+                     if len(pts) else 1.0)
+    # Make radius big (HPR becomes conservative as radius grows)
+    radius = max(1e-3, radius_scale * max_dist_full)
+
+    # HPR can still be sensitive if the camera is inside the convex hull.
+    # Keep the camera comfortably away from the object relative to its size.
+    _, visible_idx = pcd_fov.hidden_point_removal(camera_position, radius)
+    return pcd_fov.select_by_index(visible_idx)

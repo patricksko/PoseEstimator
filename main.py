@@ -45,6 +45,9 @@ if __name__ == "__main__":
     src_clouds = []
     for ply_file in ply_files:
         src = o3d.io.read_point_cloud(ply_file)
+        # o3d.visualization.draw_geometries([
+        #     src.paint_uniform_color([0, 1, 1])
+        # ], window_name="ICP Refined Registration")
         src_clouds.append(src)
         print(f"Loaded: {ply_file} with {len(src.points)} points")
     
