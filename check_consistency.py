@@ -68,7 +68,7 @@ if __name__ == "__main__":
     dst = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
 
     # 3. Load GT pose for frame 0
-    T_m2c = load_gt_pose(gt_data, frame_id=0, obj_idx=0, unit="m")
+    T_m2c = load_gt_pose(gt_data, frame_id=0, obj_idx=0, unit="mm")
     # 4. Transform model into camera frame
     src_gt = apply_transform(src, T_m2c)
     
