@@ -9,6 +9,7 @@ import glob
 import os
 from dataclasses import dataclass
 
+
 @dataclass
 class TemplateMetrics:
     template_idx: int
@@ -17,12 +18,10 @@ class TemplateMetrics:
     num_s_inliers: int
     num_t_inliers: int
 
+def get_angular_error(R_exp, R_est):
+    """Calculate angular error in radians"""
+    return abs(np.arccos(min(max(((np.matmul(R_exp.T, R_est)).trace() - 1) / 2, -1.0), 1.0)))
 
-def Rt2T(R,t):
-    T = np.identity(4)
-    T[:3,:3] = R
-    T[:3,3] = t
-    return T 
 
 def load_camera_intrinsics(scene_camera_path, frame_id, image_width, image_height):
     """
@@ -196,10 +195,6 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
 
     return result.correspondence_set
 
-
-
-
-import copy
 def visualize_correspondences(src_down, dst_down, correspondences, offset=(0.1,0,0)):
     """
     Visualize correspondences between two point clouds in Open3D.
@@ -231,223 +226,188 @@ def visualize_correspondences(src_down, dst_down, correspondences, offset=(0.1,0
     o3d.visualization.draw_geometries([src_temp, dst_temp, line_set])
 
 
+def cloud_resolution(pcd, k=8):
+    pts = np.asarray(pcd.points)
+    if len(pts) < 2:
+        return 0.005
+    kd = o3d.geometry.KDTreeFlann(pcd)
+    dists = []
+    for i, p in enumerate(pts[::max(1, len(pts)//5000)]):  # subsample for speed
+        _, idx, dd = kd.search_knn_vector_3d(p, min(k+1, len(pts)))
+        # skip self (dd[0] == 0)
+        if len(dd) > 1:
+            dists.extend(np.sqrt(dd[1:]))
+    return float(np.median(dists)) if dists else 0.005
 
-def run_teaser(source, target, correspondences):
+
+
+def run_teaser(source, target, correspondences, noise_bound_m=0.001):
     if len(correspondences) < 3:
-        return np.eye(4), []
-    
-    src_corr = np.array([source.points[i] for i, _ in correspondences]).T
-    tgt_corr = np.array([target.points[j] for _, j in correspondences]).T
-    
+        return np.eye(4), [], [], []
+
+    src_corr = np.array([source.points[i] for i, _ in correspondences]).T  # 3xN
+    tgt_corr = np.array([target.points[j] for _, j in correspondences]).T  # 3xN
+
     params = tpp.RobustRegistrationSolver.Params()
     params.cbar2 = 1
-    params.noise_bound = 0.001
+    params.noise_bound = float(noise_bound_m)
     params.estimate_scaling = False
     params.rotation_estimation_algorithm = tpp.RotationEstimationAlgorithm.GNC_TLS
     params.rotation_gnc_factor = 1.4
     params.rotation_max_iterations = 100
     params.rotation_cost_threshold = 1e-12
-    
+
     solver = tpp.RobustRegistrationSolver(params)
     solver.solve(src_corr, tgt_corr)
     sol = solver.getSolution()
-    
-    R_inliers = solver.getRotationInliers()
-    s_inliers = solver.getScaleInliers()
-    t_inliers = solver.getTranslationInliers()
-    R = np.array(sol.rotation)
-    t = np.array(sol.translation).reshape((3, 1))
-    
+
+    R_inliers = list(solver.getRotationInliers() or [])
+    s_inliers = list(solver.getScaleInliers() or [])
+    t_inliers = list(solver.getTranslationInliers() or [])
+
+    R = np.asarray(sol.rotation)
+    t = np.asarray(sol.translation).reshape((3, 1))
     T = np.eye(4)
     T[:3, :3] = R
     T[:3, 3:] = t
-    
     return T, R_inliers, s_inliers, t_inliers
+
+
 def chamfer_distance(src, dst):
-    """Compute symmetric Chamfer distance between two Open3D clouds"""
-    src_pts = np.asarray(src.points)
-    dst_pts = np.asarray(dst.points)
-    src_kd = o3d.geometry.KDTreeFlann(dst)
-    dst_kd = o3d.geometry.KDTreeFlann(src)
+    d1 = src.compute_point_cloud_distance(dst)
+    d2 = dst.compute_point_cloud_distance(src)
+    # symmetric mean
+    return float(np.mean(d1) + np.mean(d2))
 
-    d_src = []
-    for p in src_pts:
-        _, _, d = src_kd.search_knn_vector_3d(p, 1)
-        d_src.append(np.sqrt(d[0]))
-    d_dst = []
-    for p in dst_pts:
-        _, _, d = dst_kd.search_knn_vector_3d(p, 1)
-        d_dst.append(np.sqrt(d[0]))
-    return np.mean(d_src) + np.mean(d_dst)
 
-def is_y_up_camera(H, tol_deg=20):
+
+def centroid_of(pcd: o3d.geometry.PointCloud) -> np.ndarray:
+    pts = np.asarray(pcd.points)
+    if pts.size == 0:
+        return np.zeros(3)
+    return pts.mean(axis=0)
+
+def pca_axes(pcd: o3d.geometry.PointCloud):
     """
-    Check if model's +Y axis points upwards relative to camera frame.
-    In camera convention: +Y is down, so "up" = [0, -1, 0].
+    Returns:
+      R (3x3): columns are principal directions (X=col0, Y=col1, Z=col2)
+      s (3,) : singular values (sqrt eigenvalues) proportional to std along each axis
+    Columns sorted by decreasing variance. Ensures right-handed basis (det=+1).
     """
-    cam_up = [0,1,0]
-    R = H[:3, :3]
-    R_inv = np.linalg.inv(R)
-    model_y_cam = R_inv[:, 1] / (np.linalg.norm(R_inv[:, 1]))
-    cosang = float(np.clip(np.dot(model_y_cam, cam_up), -1.0, 1.0))
-    angle = np.degrees(np.arccos(cosang))
-    print("="*100)
-    return angle <= tol_deg, angle
+    P = np.asarray(pcd.points)
+    C = P.mean(axis=0, keepdims=True)
+    X = P - C
+    # covariance
+    cov = (X.T @ X) / max(len(P) - 1, 1)
+    vals, vecs = np.linalg.eigh(cov)           # eigenvalues ascending
+    order = vals.argsort()[::-1]               # descending
+    vals = vals[order]
+    R = vecs[:, order]
+    # right-handedness: flip third axis if needed
+    if np.linalg.det(R) < 0:
+        R[:, 2] *= -1.0
+    s = np.sqrt(np.maximum(vals, 0.0))
+    return R, s
+
+
+
+def initial_align_centroid_pca(src: o3d.geometry.PointCloud,
+                               dst: o3d.geometry.PointCloud) -> np.ndarray:
+    """
+    Build a rigid transform T0 that:
+      - aligns src centroid to dst centroid
+      - aligns src PCA axes to dst PCA axes (with sign fixes)
+    """
+    c_s = centroid_of(src)
+    c_d = centroid_of(dst)
+
+    R_s, _ = pca_axes(src)
+    R_d, _ = pca_axes(dst)
+
+    R_s_adj = R_s.copy()
+    for i in range(3):
+        if np.dot(R_s[:, i], R_d[:, i]) < 0:
+            R_s_adj[:, i] *= -1.0
+    # recompute right-handed
+    if np.linalg.det(R_s_adj) < 0:
+        R_s_adj[:, 2] *= -1.0
+
+    # rotation mapping src->dst
+    R0 = R_d @ R_s_adj.T
+    # translation to map centroids
+    t0 = c_d - R0 @ c_s
+
+    T0 = np.eye(4)
+    T0[:3, :3] = R0
+    T0[:3, 3] = t0
+    return T0
+
 
 def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
+    # Pre-align destination to its own PCA frame (not required, for stability we leave dst as-is)
+    # Downsample dst once
     dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, target_points)
-    
-    best_score = float("inf")
-    best_idx = -1
-    best_transform = np.eye(4)
+    if not dst_down.has_normals():
+        dst_down.estimate_normals()
+    res = cloud_resolution(dst_down)
+    noise_bound = 1.5 * res           # adaptive, often far better than a fixed 1mm
+    match_max_dist = 4.0 * res        # cap for geometric plausibility
+
+    best = dict(idx=-1, T=np.eye(4), score=np.inf)
     all_metrics = []
-    tol_deg = 20
-    
+
     for idx, src_cloud in enumerate(src_clouds):
-        # o3d.visualization.draw_geometries([
-        #     src_cloud.paint_uniform_color([0, 1, 1]),
-        # ], window_name="Template")
-        src_down, src_fpfh = preprocess_point_cloud_uniform(src_cloud, target_points)
+        # 0) Initial centroid + PCA alignment (src->dst)
+        T0 = initial_align_centroid_pca(src_cloud, dst_cloud)
+        src0 = copy.deepcopy(src_cloud).transform(T0)
+
+        # 1) Downsample & FPFH *after* coarse alignment
+        src_down, src_fpfh = preprocess_point_cloud_uniform(src0, target_points)
         if src_down is None:
             continue
-        
-        correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh)
-        H, R_inliers, s_inliers, t_inliers = run_teaser(src_down, dst_down, correspondences)
-        
-        # # # --- NEW: ICP refinement ---
-        # icp_result = o3d.pipelines.registration.registration_icp(
-        #     src_cloud, dst_cloud, 0.01, H,
-        #     o3d.pipelines.registration.TransformationEstimationPointToPoint()
-        # )
-        # refined_transform = icp_result.transformation
-        
-        src_aligned = copy.deepcopy(src_cloud).transform(H)
-        score = chamfer_distance(src_aligned, dst_cloud)
-        # Check Y-up physics constraint
-        #y_ok, angle = is_y_up_camera(H, tol_deg=tol_deg)
-        metrics = {
+        if not src_down.has_normals():
+            src_down.estimate_normals()
+
+        # 2) putative correspondences
+        correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=match_max_dist)
+        if len(correspondences) < 20:
+            print("Not enough correspondences")
+            all_metrics.append({"template_idx": idx, "num_corr": len(correspondences),
+                                "num_inliers": 0, "inlier_ratio": 0.0,
+                                "geom": float("inf"), "score": float("inf"),
+                                "note": "few_corr"})
+            continue
+        # 3) TEASER++ (no init required, but the pre-align helps the correspondences)
+        H, R_inliers, _, _ = run_teaser(src_down, dst_down, correspondences, noise_bound_m=noise_bound)
+        inlier_ratio = (len(R_inliers) / max(1, len(correspondences)))
+        # 4) Score with Chamfer on full clouds (apply full transform: H ∘ T0)
+        T_full = H @ T0
+        src_aligned = copy.deepcopy(src_cloud).transform(T_full)
+        alpha = 1
+    
+
+        geom_err = chamfer_distance(src_aligned, dst_cloud)
+
+        # Combined score
+        score = alpha * geom_err
+
+        all_metrics.append({
             "template_idx": idx,
-            "num_corr": len(correspondences),
-            "num_inliers": len(R_inliers or []),
-            # "icp_fitness": icp_result.fitness,
-            # "icp_rmse": icp_result.inlier_rmse,
-            "chamfer": score
-        }
-        all_metrics.append(metrics)
-        
-        if score < best_score:  
-            best_score = score
-            best_idx = idx
-            best_transform = H
-    
-    return best_idx, best_transform, best_score, all_metrics
+            "num_corr": int(len(correspondences)),
+            "num_inliers": int(len(R_inliers)),
+            "inlier_ratio": float(inlier_ratio),
+            "geom": float(geom_err),
+            "score": float(score)
+        })
+
+        print(f"[{idx}] corr={len(correspondences):3d}, inl={len(R_inliers):3d} "
+              f"({inlier_ratio*100:4.1f}%), geom={geom_err:.5f}, score={score:.5f}")
 
 
-def crop_pointcloud_fov(pcd, fov_deg=60.0, look_dir=np.array([0, 0, 1])):
-    """
-    Crops a point cloud to simulate a camera FoV.
-    - pcd: Open3D PointCloud
-    - fov_deg: field of view in degrees
-    - look_dir: viewing direction vector (camera looks along this)
-    """
-    points = np.asarray(pcd.points)
-    look_dir = look_dir / np.linalg.norm(look_dir)
-    fov_rad = np.deg2rad(fov_deg)
+        if score < best["score"]:
+            best.update(idx=idx, T=T_full, score=score)
 
-    # Compute angles between look_dir and each point vector
-    norms = np.linalg.norm(points, axis=1)
-    norms[norms == 0] = 1e-8
-    dirs = points / norms[:, None]
-    cos_angles = np.dot(dirs, look_dir)
-    mask = cos_angles > np.cos(fov_rad / 2)
-
-    return pcd.select_by_index(np.where(mask)[0])
-
-def crop_pointcloud_fov_hpr(pcd, camera_position=np.array([0, 0, -1]),
-                            camera_lookat=np.array([0, 0, 0]),
-                            fov_deg=60.0):
-    """
-    Simulates a camera FoV with hidden point removal.
-    Returns only points visible from the given camera position and direction.
-    
-    Parameters:
-    - pcd: Open3D PointCloud
-    - camera_position: 3D position of the camera
-    - camera_lookat: target point the camera is looking at
-    - fov_deg: field of view (degrees)
-    """
-    # View direction
-    cam_dir = camera_lookat - camera_position
-    cam_dir /= np.linalg.norm(cam_dir)
-
-    # First, remove points outside the angular FoV
-    points = np.asarray(pcd.points)
-    vecs = points - camera_position
-    vecs_norm = np.linalg.norm(vecs, axis=1)
-    vecs_norm[vecs_norm == 0] = 1e-8
-    dirs = vecs / vecs_norm[:, None]
-
-    cos_angles = np.dot(dirs, cam_dir)
-    mask_fov = cos_angles > np.cos(np.deg2rad(fov_deg) / 2)
-    pcd_fov = pcd.select_by_index(np.where(mask_fov)[0])
-    o3d.visualization.draw_geometries([
-        pcd_fov.paint_uniform_color([0, 1, 1]),
-        #dst_cloud.paint_uniform_color([0, 1, 0])
-    ], window_name="FOV")
-
-    # Now apply Hidden Point Removal to simulate occlusion
-    radius = np.linalg.norm(np.asarray(pcd_fov.points) - camera_position, axis=1).max() * 3
-    _, pt_map = pcd_fov.hidden_point_removal(camera_position, radius)
-    pcd_visible = pcd_fov.select_by_index(pt_map)
-    o3d.visualization.draw_geometries([
-            pcd_visible.paint_uniform_color([0, 1, 1]),
-            #dst_cloud.paint_uniform_color([0, 1, 0])
-        ], window_name="Visible")
-    return pcd_visible
+    return best["idx"], best["T"], best["score"], all_metrics
 
 
-def apply_transform_and_noise(pcd, R, t, noise_sigma=0.0):
-    """
-    Applies rigid transform and optional Gaussian noise to a point cloud.
-    - R: 3x3 rotation matrix
-    - t: 3-element translation vector
-    - noise_sigma: standard deviation of Gaussian noise
-    """
-    transformed = copy.deepcopy(pcd)
-    pts = np.asarray(transformed.points)
-    pts = (R @ pts.T).T + t
-    if noise_sigma > 0:
-        pts += np.random.normal(scale=noise_sigma, size=pts.shape)
-    transformed.points = o3d.utility.Vector3dVector(pts)
-    return transformed
 
-
-def sample_pointcloud_with_noise(mesh, num_points=5000, jitter_sigma=0.0):
-    """
-    Samples a point cloud from a mesh with optional jitter noise per point.
-    - mesh: Open3D TriangleMesh
-    - num_points: number of points to sample
-    - jitter_sigma: standard deviation for Gaussian noise
-    """
-    pcd = mesh.sample_points_uniformly(number_of_points=num_points)
-    if jitter_sigma > 0:
-        pts = np.asarray(pcd.points)
-        pts += np.random.normal(scale=jitter_sigma, size=pts.shape)
-        pcd.points = o3d.utility.Vector3dVector(pts)
-    return pcd
-
-
-def pyrender_to_open3d(pose_pyrender):
-    """
-    Convert a 4x4 camera pose from pyrender (X-right, Y-forward, Z-up)
-    to Open3D coordinates (X-right, Y-up, Z-forward).
-    """
-    # Rotation to swap Y and Z axes
-    R_swap = np.array([[-1, 0, 0],
-                       [0, 0, -1],
-                       [0, 1, 0]])
-    
-    T_new = np.eye(4)
-    T_new[:3, :3] = R_swap @ pose_pyrender[:3, :3]
-    T_new[:3, 3] = R_swap @ pose_pyrender[:3, 3]
-    return T_new

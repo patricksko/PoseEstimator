@@ -6,15 +6,19 @@ import copy
 import time
 import glob
 import os
-from EstimHelpers.registration_utils import find_best_template_teaser, get_pointcloud, preprocess_point_cloud_uniform
+from EstimHelpers.registration_utils import find_best_template_teaser, get_pointcloud,get_angular_error
 from EstimHelpers.detection_utils import detect_mask
 import cv2 
 import matplotlib.pyplot as plt
 
+######## Global Variables  #########
+WEIGHTS = "./data/best.pt"
+RGB_PATH = "./data/000000.jpg"
+DEPTH_PATH = "./data/000000.png"
+SCENE_CAMERA_PATH = "./data/scene_camera.json"
+CAD_PATH = "./data/lego_views/"
+GT_DATA = "./data/scene_gt.json"
 
-def get_angular_error(R_exp, R_est):
-    """Calculate angular error in radians"""
-    return abs(np.arccos(min(max(((np.matmul(R_exp.T, R_est)).trace() - 1) / 2, -1.0), 1.0)))
 
 def plot_frame(ax, R, origin=[0,0,0], label='Frame', length=1.0):
     """Plot a 3D coordinate frame given a rotation matrix R and origin."""
@@ -26,45 +30,29 @@ def plot_frame(ax, R, origin=[0,0,0], label='Frame', length=1.0):
     ax.plot([origin[0], x_axis[0]], [origin[1], x_axis[1]], [origin[2], x_axis[2]], 'r', label=f'{label}-X')
     ax.plot([origin[0], y_axis[0]], [origin[1], y_axis[1]], [origin[2], y_axis[2]], 'g', label=f'{label}-Y')
     ax.plot([origin[0], z_axis[0]], [origin[1], z_axis[1]], [origin[2], z_axis[2]], 'b', label=f'{label}-Z')
+
 if __name__ == "__main__":
-
-    weights = "./data/best.pt"
-    rgb_path = "./data/000000.jpg"
-    depth_path = "./data/000000.png"
-    scene_camera_path = "./data/scene_camera.json"
-
-    mask = detect_mask(weights, rgb_path)
+    mask = detect_mask(WEIGHTS, RGB_PATH)   # Detect mask of Object with YOLO Network
     
-    gt_data = "./data/scene_gt.json"
-
-    # #Read CAD Path
-    cad_path = "./data/lego_views/"
-
-    ply_files = sorted(glob.glob(os.path.join(cad_path, "*.ply")))
-
+    # Read Pointcloud Templates and append them to list (Source)
+    ply_files = sorted(glob.glob(os.path.join(CAD_PATH, "*.ply")))  
     src_clouds = []
     for ply_file in ply_files:
         src = o3d.io.read_point_cloud(ply_file)
-        # o3d.visualization.draw_geometries([
-        #     src.paint_uniform_color([0, 1, 1])
-        # ], window_name="ICP Refined Registration")
         src_clouds.append(src)
         print(f"Loaded: {ply_file} with {len(src.points)} points")
     
-
-    dst_cloud = get_pointcloud(depth_path, rgb_path, scene_camera_path, mask=mask)
+    # Create Pointcloud of Destination
+    dst_cloud = get_pointcloud(DEPTH_PATH, RGB_PATH, SCENE_CAMERA_PATH, mask=mask)
     if dst_cloud is None or len(dst_cloud.points) == 0:
             print("Failed to generate scene point cloud!")
             exit(1)
 
     
-    
-    start_time = time.time()
     best_idx, H, best_inliers, all_metrics = find_best_template_teaser(dst_cloud, src_clouds, target_points=100)
-    print("="*50)
     for m in all_metrics:
-        print(f"Template {m['template_idx']}: Chamfer = {m['chamfer']:.6f}")
-
+        print(f"Template {m['template_idx']}: Chamfer = {m['score']:.6f}")
+    print(best_idx)
     # Apply final transformation
     if best_idx >= 0:
         src_cloud = copy.deepcopy(src_clouds[best_idx])
