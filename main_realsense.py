@@ -5,6 +5,8 @@ from EstimHelpers.HelpersRealtime import *
 from ultralytics import YOLO
 import time
 from colorama import Fore, Style
+from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Slerp
 
 WEIGHTS_PATH="./data/best.pt"
 PCD_PATH = "./data/lego_views/"
@@ -68,6 +70,10 @@ def main():
     renderer = None
     scene = None
     render_w = render_h = None
+    poses = []
+    xyz_list = []
+    rpy_list = []
+    stats_plotted = False
     
     try:
         while True:
@@ -146,7 +152,7 @@ def main():
                     print("[INFO] Initial pose rejected. Retrying...")
                     frame_counter = 0
                     continue
-             
+            all = time.time()
             # Projection (intrinsics) for this frame
             start = time.time()
             near, far = 0.01, 2.0
@@ -173,6 +179,9 @@ def main():
             if frame_id % 1 == 0:
                 
                 mask = detect_mask(yolo_model, color)
+                if mask is None or mask.sum() == 0:   # no segmentation found
+                    print("No mask detected")
+                    exit()
                 depth_m = depth.astype(np.float32) * depth_scale
                 depth_m[mask == 0] = 0.0  
 
@@ -185,7 +194,6 @@ def main():
                 )
                 dst_cloud = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, o3d_intrinsics_from_rs(intr))
                 timer_print(start, "RGB Kamera")
-                dst_cloud, _ = dst_cloud.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
                 start = time.time()
                 dst_down, _ = preprocess_point_cloud_uniform(dst_cloud, TARGET_PTS, False)
                 timer_print(start, "Preprocessing Destination")
@@ -196,11 +204,59 @@ def main():
                 )
                 timer_print(start, "ICP")
                 delta = icp_result.transformation  # refined
-                T_m2c = delta@T_m2c
+                T_new = delta @ T_m2c              # candidate new pose
 
-                end = time.time()
+                # alpha = 0.5  # smoothing factor (0=freeze, 1=no filter)
+
+                # # --- Smooth translation ---
+                # T_m2c[:3, 3] = (1 - alpha) * T_m2c[:3, 3] + alpha * T_new[:3, 3]
+
+                # # --- Smooth rotation with SLERP ---
+                # R_old = R.from_matrix(T_m2c[:3, :3])
+                # R_new = R.from_matrix(T_new[:3, :3])
+
+                # # key times [0,1], and two rotations stacked together
+                # slerp = Slerp([0, 1], R.from_matrix([R_old.as_matrix(), R_new.as_matrix()]))
+
+                # # evaluate at alpha (0 = old, 1 = new)
+                # R_smooth = slerp([alpha])[0]
+
+                # T_m2c[:3, :3] = R_smooth.as_matrix()
+
+                T_m2c = T_new
+                if len(poses) < 200:
+                    poses.append(T_m2c.copy())
+
+                # --- When 50 collected, compute stats and plot once ---
+                if len(poses) == 200 and not stats_plotted:
+                    for T in poses:
+                        xyz_list.append(T[:3, 3])
+                        rpy_list.append(R.from_matrix(T[:3, :3]).as_euler('xyz', degrees=True))
+
+                    xyz_arr = np.vstack(xyz_list)   # shape (N,3)
+                    rpy_arr = np.vstack(rpy_list)   # shape (N,3)
+                    frames = np.arange(len(poses))
+
+                    # Plot 6 subplots
+                    fig, axes = plt.subplots(6, 1, figsize=(10, 12), sharex=True)
+
+                    labels = ['Roll [deg]', 'Pitch [deg]', 'Yaw [deg]', 'X [m]', 'Y [m]', 'Z [m]']
+                    data = [rpy_arr[:,0], rpy_arr[:,1], rpy_arr[:,2],
+                            xyz_arr[:,0], xyz_arr[:,1], xyz_arr[:,2]]
+
+                    for i, ax in enumerate(axes):
+                        ax.plot(frames, data[i], '-o', markersize=2)
+                        ax.set_ylabel(labels[i])
+                        ax.grid(True)
+
+                    axes[-1].set_xlabel("Frame index")
+
+                    plt.tight_layout()
+                    plt.show()
+
                 print("="*50)
-                print(end-start)
+                timer_print(all, "Full Time")
+
                
             uv = project_points(cad_points, K, T_m2c)
             for (u, v) in uv:
