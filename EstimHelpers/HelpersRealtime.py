@@ -7,7 +7,7 @@ import copy
 import json
 import os
 import glob
-
+import time
 
 def uniform_downsample_farthest_point(pcd, target_points=500):
     """
@@ -15,31 +15,32 @@ def uniform_downsample_farthest_point(pcd, target_points=500):
     Good spatial distribution, moderate computation time.
     """
     points = np.asarray(pcd.points)
-    n_points = len(points)
-    #print(f"Number of points: {n_points}, target: {target_points}")
+    idx = np.random.choice(len(points), size=target_points, replace=False)
+    # n_points = len(points)
+    # #print(f"Number of points: {n_points}, target: {target_points}")
 
-    target_points = int(target_points)
-    if n_points <= target_points:
-        return pcd
+    # target_points = int(target_points)
+    # if n_points <= target_points:
+    #     return pcd
     
-    # Initialize with random point
-    selected_indices = [np.random.randint(n_points)]
-    distances = np.full(n_points, np.inf)
+    # # Initialize with random point
+    # selected_indices = [np.random.randint(n_points)]
+    # distances = np.full(n_points, np.inf)
     
-    for i in range(1, target_points):
-        # Update distances to nearest selected point
-        last_point = points[selected_indices[-1]]
-        new_distances = np.linalg.norm(points - last_point, axis=1)
-        distances = np.minimum(distances, new_distances)
+    # for i in range(1, target_points):
+    #     # Update distances to nearest selected point
+    #     last_point = points[selected_indices[-1]]
+    #     new_distances = np.linalg.norm(points - last_point, axis=1)
+    #     distances = np.minimum(distances, new_distances)
         
-        # Select point with maximum distance to any selected point
-        next_idx = np.argmax(distances)
-        selected_indices.append(next_idx)
+    #     # Select point with maximum distance to any selected point
+    #     next_idx = np.argmax(distances)
+    #     selected_indices.append(next_idx)
         
-        # Set distance of selected point to 0
-        distances[next_idx] = 0
+    #     # Set distance of selected point to 0
+    #     distances[next_idx] = 0
     
-    return pcd.select_by_index(selected_indices)
+    return pcd.select_by_index(idx)
 
 
 
@@ -58,7 +59,6 @@ def preprocess_point_cloud_uniform(pcd, target_points=500, calc_fpfh=True):
     if len(pcd.points) == 0:
         print("Empty point cloud!")
         return None, None
-
     pcd_down = uniform_downsample_farthest_point(pcd, target_points)
     
     # Ensure we have enough points for feature computation
