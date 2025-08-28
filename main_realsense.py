@@ -12,6 +12,7 @@ WEIGHTS_PATH="./data/best.pt"
 PCD_PATH = "./data/lego_views/"
 CAD_PATH = "./data/obj_000001.ply"
 TARGET_PTS    = 100
+TRACK_EVERY = 1
 
 def timer_print(start_time, label):
     """Clean timer output"""
@@ -26,6 +27,7 @@ def main():
     if len(ctx.devices) == 0:
         raise RuntimeError("❌ No Intel RealSense device connected.")
     
+    # Configure Realsense
     pipe = rs.pipeline()
     cfg = rs.config()
     cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)  # enable depth stream
@@ -34,18 +36,19 @@ def main():
     align = rs.align(rs.stream.color)
 
     depth_scale = profile.get_device().first_depth_sensor().get_depth_scale() # get depth scale of realsense
-    # Filters:
-    decimation = rs.decimation_filter()
+    
+    # Filters of Realsense
     spatial    = rs.spatial_filter()
     temporal   = rs.temporal_filter()
     hole_fill  = rs.hole_filling_filter()
-    colorizer  = rs.colorizer()
 
     intr, K = rs_get_intrinsics(profile=profile) # get intrinsic info and intrinsic camera matrix
 
+    # Read CAD Model for comparision
     cad_model = o3d.io.read_point_cloud(CAD_PATH)
     cad_points = np.asarray(cad_model.points)
 
+    # Read CAD Model for later Rendering 
     mesh = o3d.io.read_triangle_mesh(CAD_PATH)
     mesh.compute_vertex_normals()
 
@@ -66,7 +69,7 @@ def main():
     frame_id = 0
     initialized = False # Variable for initial orientation
 
-    # Offscreen renderer (lazy-init once we know width/height)
+    # Offscreen renderer
     renderer = None
     scene = None
     render_w = render_h = None
@@ -77,19 +80,25 @@ def main():
     
     try:
         while True:
+            # Read Camera frames (color and depth) and align them
             frameset = align.process(pipe.wait_for_frames())
             depth_frame = frameset.get_depth_frame()
             color_frame = frameset.get_color_frame()
             if not depth_frame or not color_frame:
                 continue
+            #preprocess the images
             frame = depth_frame
             frame = spatial.process(frame)
             frame = temporal.process(frame)
             frame = hole_fill.process(frame)
+
             # Convert to numpy
             depth = np.asanyarray(frame.get_data())  # uint16 depth in sensor units
             color = np.asanyarray(color_frame.get_data())  # BGR
+            
+            #First initialization of pose
             if not initialized:
+                # Check if mask is available, and if its not a misdetection (should appear in at least 10 frames)
                 while frame_counter!=10:
                     frameset = align.process(pipe.wait_for_frames())
                     depth_frame = frameset.get_depth_frame()
@@ -100,19 +109,18 @@ def main():
                     frame = spatial.process(frame)
                     frame = temporal.process(frame)
                     frame = hole_fill.process(frame)
-                    # Convert to numpy
-                    depth = np.asanyarray(frame.get_data())  # uint16 depth in sensor units
-                    color = np.asanyarray(color_frame.get_data())  # BGR
+                    depth = np.asanyarray(frame.get_data())
+                    color = np.asanyarray(color_frame.get_data())  
                     mask = detect_mask(yolo_model, color)
-                    if mask is None:
+                    if mask is None or mask.sum() == 0:
                         frame_counter = 0
                     frame_counter+=1
                 
-                depth_m = depth.astype(np.float32) * depth_scale
-                depth_m[mask == 0] = 0.0 
+                depth_m = depth.astype(np.float32) * depth_scale # mind depth scale of realsense
+                depth_m[mask == 0] = 0.0 # create a mask of the depth image for pointcloud
 
-                depth_o3d = o3d.geometry.Image(depth_m.astype(np.float32))
-                color_o3d = o3d.geometry.Image(cv2.cvtColor(color, cv2.COLOR_BGR2RGB))
+                depth_o3d = o3d.geometry.Image(depth_m.astype(np.float32)) # create open3d depth image for later processing
+                color_o3d = o3d.geometry.Image(cv2.cvtColor(color, cv2.COLOR_BGR2RGB)) # create open3d color image for later processing
                 rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
                     color_o3d, depth_o3d, depth_scale=1.0, convert_rgb_to_intensity=False
                 )
@@ -146,7 +154,6 @@ def main():
                     mat = o3d.visualization.rendering.MaterialRecord()
                     mat.shader = "defaultLit"
                     scene.add_geometry("mesh", mesh, mat)
-                    idx = 1  # start tracking on next frame
                     continue
                 else:
                     print("[INFO] Initial pose rejected. Retrying...")
@@ -176,12 +183,12 @@ def main():
             prev_down, _ = preprocess_point_cloud_uniform(src, TARGET_PTS, False)
             timer_print(start, "Preprocessing Previous")
             frame_id += 1
-            if frame_id % 1 == 0:
+            if frame_id % TRACK_EVERY == 0:
                 
                 mask = detect_mask(yolo_model, color)
                 if mask is None or mask.sum() == 0:   # no segmentation found
                     print("No mask detected")
-                    exit()
+                    continue
                 depth_m = depth.astype(np.float32) * depth_scale
                 depth_m[mask == 0] = 0.0  
 
@@ -204,55 +211,7 @@ def main():
                 )
                 timer_print(start, "ICP")
                 delta = icp_result.transformation  # refined
-                T_new = delta @ T_m2c              # candidate new pose
-
-                # alpha = 0.5  # smoothing factor (0=freeze, 1=no filter)
-
-                # # --- Smooth translation ---
-                # T_m2c[:3, 3] = (1 - alpha) * T_m2c[:3, 3] + alpha * T_new[:3, 3]
-
-                # # --- Smooth rotation with SLERP ---
-                # R_old = R.from_matrix(T_m2c[:3, :3])
-                # R_new = R.from_matrix(T_new[:3, :3])
-
-                # # key times [0,1], and two rotations stacked together
-                # slerp = Slerp([0, 1], R.from_matrix([R_old.as_matrix(), R_new.as_matrix()]))
-
-                # # evaluate at alpha (0 = old, 1 = new)
-                # R_smooth = slerp([alpha])[0]
-
-                # T_m2c[:3, :3] = R_smooth.as_matrix()
-
-                T_m2c = T_new
-                if len(poses) < 200:
-                    poses.append(T_m2c.copy())
-
-                # --- When 50 collected, compute stats and plot once ---
-                if len(poses) == 200 and not stats_plotted:
-                    for T in poses:
-                        xyz_list.append(T[:3, 3])
-                        rpy_list.append(R.from_matrix(T[:3, :3]).as_euler('xyz', degrees=True))
-
-                    xyz_arr = np.vstack(xyz_list)   # shape (N,3)
-                    rpy_arr = np.vstack(rpy_list)   # shape (N,3)
-                    frames = np.arange(len(poses))
-
-                    # Plot 6 subplots
-                    fig, axes = plt.subplots(6, 1, figsize=(10, 12), sharex=True)
-
-                    labels = ['Roll [deg]', 'Pitch [deg]', 'Yaw [deg]', 'X [m]', 'Y [m]', 'Z [m]']
-                    data = [rpy_arr[:,0], rpy_arr[:,1], rpy_arr[:,2],
-                            xyz_arr[:,0], xyz_arr[:,1], xyz_arr[:,2]]
-
-                    for i, ax in enumerate(axes):
-                        ax.plot(frames, data[i], '-o', markersize=2)
-                        ax.set_ylabel(labels[i])
-                        ax.grid(True)
-
-                    axes[-1].set_xlabel("Frame index")
-
-                    plt.tight_layout()
-                    plt.show()
+                T_m2c = delta @ T_m2c              # candidate new pose
 
                 print("="*50)
                 timer_print(all, "Full Time")
