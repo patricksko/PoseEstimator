@@ -3,22 +3,24 @@ import numpy as np
 import pyrealsense2 as rs
 
 class TheRetector:
-    def __init__(self, model, profile, class_id=0, conf=0.8, imgsz=512, device="0"):
+    def __init__(self, model, profile, class_id=0, conf=0.8, device="0"):
         self.model = model
         self.class_id = class_id
         self.conf = conf
-        self.imgsz = imgsz
         self.device = device
         self.profile = profile
+        self.prev_centroids = []     # list of (u,v) from previous frame
+        self.color_map = {}          # maps object ID -> color
+        self.next_color_id = 0   
 
     def detect_masks(self, img_bgr):
         """Run YOLO and return a list of masks (one per detected object)."""
         h, w = img_bgr.shape[:2]
         masks = []
+        centroids = []
 
         results = self.model(
             source=img_bgr,
-            imgsz=self.imgsz,
             conf=self.conf,
             device=self.device,
             save=False,
@@ -35,22 +37,51 @@ class TheRetector:
                 mask = np.zeros((h, w), dtype=np.uint8)
                 cv2.fillPoly(mask, [poly], 255)
                 masks.append(mask)
+                # compute centroid
+                M = cv2.moments(mask)
+                if M["m00"] > 0:
+                    cX = int(M["m10"] / (M["m00"]+ 1e-5))
+                    cY = int(M["m01"] / (M["m00"]+ 1e-5))
+                else:
+                    cX, cY = 0, 0
+                centroids.append((cX, cY))
 
-        return masks
+        return masks, centroids
 
-    def overlay_masks(self, img_bgr, masks, alpha=0.5):
-        """Overlay each mask in a different random color."""
+    def overlay_masks_consistent(self, img_bgr, masks, centroids, alpha=0.5):
+        """Overlay each mask with a consistent color across frames"""
         overlay = img_bgr.copy()
+        new_centroids = []
 
-        # Pre-generate distinct colors for each mask
-        rng = np.random.default_rng(42)  # reproducible random colors
-        colors = rng.integers(0, 255, size=(len(masks), 3))
+        for mask, centroid in zip(masks, centroids):
+            # find nearest previous centroid
+            assigned_id = None
+            if self.prev_centroids:
+                dists = [np.linalg.norm(np.array(centroid)-np.array(pc)) for pc in self.prev_centroids]
+                min_idx = int(np.argmin(dists))
+                if dists[min_idx] < 50:  # threshold in pixels
+                    assigned_id = min_idx
 
-        for mask, color in zip(masks, colors):
+            # if new object, assign new ID
+            if assigned_id is None:
+                assigned_id = self.next_color_id
+                self.next_color_id += 1
+
+            # store centroid for next frame
+            new_centroids.append(centroid)
+
+            # assign color
+            if assigned_id not in self.color_map:
+                rng = np.random.default_rng(assigned_id)
+                self.color_map[assigned_id] = rng.integers(0, 255, size=(3,))
+            color = self.color_map[assigned_id]
+
+            # apply mask overlay
             colored_mask = np.zeros_like(img_bgr)
             colored_mask[mask > 0] = color.tolist()
             overlay = cv2.addWeighted(overlay, 1, colored_mask, alpha, 0)
 
+        self.prev_centroids = new_centroids
         return overlay
     
     def rs_get_intrinsics(self):

@@ -58,13 +58,10 @@ def main():
             color = np.asanyarray(color_frame.get_data())  # BGR
 
             # Detection
-            masks = detector.detect_masks(color)
-
-            # Overlay
-            overlay_img = detector.overlay_masks(color, masks)
-
-            # Show result
+            masks, centroids = detector.detect_masks(color)
+            overlay_img = detector.overlay_masks_consistent(color, masks, centroids)
             cv2.imshow("Detections", overlay_img)
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
