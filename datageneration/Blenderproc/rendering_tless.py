@@ -39,6 +39,7 @@ bproc.init()
 
 # load bop objects into the scene
 target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock_full'), model_type = 'cad', object_model_unit='mm')
+
 # SOLUTION 1: Set all Lego blocks to have the same category_id
 # This ensures they're treated as the same class
 LEGO_CLASS_ID = 1  # Single class ID for all Lego blocks

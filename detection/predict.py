@@ -47,8 +47,8 @@ def generate_segmentation_polygons_yolo_format(weights_path, image_path, output_
     #     print("No segmentation polygons found in prediction.")
 
 if __name__ == "__main__":
-    weights = "/home/skoumal/dev/ObjectDetection/detection/best.pt"
-    img_path = "/home/skoumal/dev/BlenderProc/frame0071.jpg"
-    out_dir = "/home/skoumal/dev/ObjectDetection/detection/"
+    weights = "/home/skoumal/dev/ObjectDetection/data/best.pt"
+    img_path = "/home/skoumal/dev/ObjectDetection/data/val_tuutuuut/images/002007_000191.jpg"
+    out_dir = "/home/skoumal/dev/ObjectDetection/data/"
 
     generate_segmentation_polygons_yolo_format(weights, img_path, out_dir)

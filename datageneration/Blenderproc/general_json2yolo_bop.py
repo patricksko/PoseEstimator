@@ -152,12 +152,12 @@ def delete_dsstore(path='../datasets'):
 
 
 if __name__ == '__main__':
-    bop_path = '/home/skoumal/dev/ObjectDetection/detection/Blenderproc/output_blenderproc_full/bop_data'
+    bop_path = '/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output/output_blenderproc/bop_data'
 
-    dataset = 'Legoblock'
+    dataset = 'Legoblock_full'
     split_type = 'train_pbr'
     whatsplit = "val"
-    scenes = list(range(2, 3))
+    scenes = list(range(1600, 2000))
     #scenes = [27, 28, 29]
 
     split_path = bop_path + "/" + dataset + "/" + split_type

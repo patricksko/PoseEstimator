@@ -35,4 +35,4 @@ def draw_yolo_polygons(image_path, label_path):
     cv2.destroyAllWindows()
 
 # Example usage
-draw_yolo_polygons("/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output_blenderproc_full/bop_data/Legoblock/train_pbr/000000/rgb/000000.jpg", "/home/skoumal/dev/ObjectDetection/detection/segmentation_polygons.txt")
+draw_yolo_polygons("/home/skoumal/dev/ObjectDetection/data/train_tuutuuut/images/000004_000009.jpg", "/home/skoumal/dev/ObjectDetection/data/train_tuutuuut/labels/000004_000009.txt")

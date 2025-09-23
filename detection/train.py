@@ -3,8 +3,8 @@ from ultralytics import YOLO
 model = YOLO("yolo11n-seg.pt")
 
 result = model.train(
-    data="/home/skoumal/dev/ObjectDetection/detection/YOLO/dataset.yaml",
-    epochs = 100,
+    data="/home/skoumal/dev/ObjectDetection/detection/dataset.yaml",
+    epochs = 300,
     imgsz=640,
     batch=16,
     optimizer="Adam",
@@ -18,6 +18,3 @@ result = model.train(
     resume=False,
     patience=10,
 )
-# results = model("./examples/my_examples/Lego_Block.jpeg", conf=0.25)
-# for r in results:
-#     r.save(filename="./prediction.jpg")
