@@ -266,7 +266,7 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
     return result.correspondence_set
 
 def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
-    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 200)
+    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 400)
     if not dst_down.has_normals():
         dst_down.estimate_normals()
     res = cloud_resolution(dst_down)
@@ -280,7 +280,7 @@ def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
         src0 = copy.deepcopy(src_cloud).transform(T0)
 
         # 1) Downsample & FPFH *after* coarse alignment
-        src_down, src_fpfh = preprocess_point_cloud_uniform(src0, 200)
+        src_down, src_fpfh = preprocess_point_cloud_uniform(src0, 400)
         if src_down is None:
             continue
         if not src_down.has_normals():
