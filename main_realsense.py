@@ -5,8 +5,6 @@ from EstimHelpers.HelpersRealtime import *
 from ultralytics import YOLO
 import time
 from colorama import Fore, Style
-from scipy.spatial.transform import Rotation as R
-from scipy.spatial.transform import Slerp
 
 WEIGHTS_PATH="./data/best.pt"
 PCD_PATH = "./data/lego_views/"

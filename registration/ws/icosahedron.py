@@ -234,7 +234,7 @@ def render_lego_views():
     
     # Load and prepare the mesh
     print("Loading Lego block mesh...")
-    mesh_path = "./../../data/obj_000001.ply"  # Update path as needed
+    mesh_path = "./../../data/block_seibersdorf.ply"  # Update path as needed
     
     if not os.path.exists(mesh_path):
         print(f"Error: Could not find {mesh_path}")
@@ -261,11 +261,11 @@ def render_lego_views():
     point_cloud.paint_uniform_color([0.0, 0.0, 1.0])
     
     # Output directory
-    output_dir = "./../../data/lego_views"
+    output_dir = "./../../data/seibersdorf_views"
     os.makedirs(output_dir, exist_ok=True)
     
     # Get camera positions
-    camera_positions = get_reduced_camera_positions(distance=0.3)
+    camera_positions = get_reduced_camera_positions(distance=1.5)
     
     print(f"Generating {len(camera_positions)} views:")
     print(f"- {sum(1 for p in camera_positions if p['type'] == 'face')} face views")
