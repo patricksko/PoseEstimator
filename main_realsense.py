@@ -2,7 +2,7 @@ import numpy as np                        # fundamental package for scientific c
 import matplotlib.pyplot as plt           # 2D plotting library producing publication quality figures
 import pyrealsense2 as rs                 # Intel RealSense cross-platform open-source API
 from EstimHelpers.HelpersRealtime import *
-from EstimHelpers.template_creation import render_lego_views, sanity_check
+from EstimHelpers.template_creation import render_lego_views
 from ultralytics import YOLO
 import time
 from colorama import Fore, Style
@@ -43,6 +43,18 @@ def main():
 
     intr, K = rs_get_intrinsics(profile=profile) # get intrinsic info and intrinsic camera matrix
 
+    #Preload Templates for Template matching
+    ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
+    if not ply_files:
+        render_lego_views(mesh_path=CAD_PATH, output_dir=PCD_PATH)
+        ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
+    src_clouds = []
+    for ply_file in ply_files:
+        src = o3d.io.read_point_cloud(ply_file)
+        src_clouds.append(src)
+        print(f"Loaded: {ply_file} with {len(src.points)} points")
+
+        
     # Read CAD Model for comparision
     cad_model = o3d.io.read_point_cloud(CAD_PATH)
     cad_points = np.asarray(cad_model.points)
@@ -51,16 +63,7 @@ def main():
     mesh = o3d.io.read_triangle_mesh(CAD_PATH)
     mesh.compute_vertex_normals()
 
-    #Preload Templates for Template matching
-    ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
-    if not ply_files:
-        render_lego_views(mesh_path="./data/obj_000001.ply", output_dir="./data/lego_views")
-        ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
-    src_clouds = []
-    for ply_file in ply_files:
-        src = o3d.io.read_point_cloud(ply_file)
-        src_clouds.append(src)
-        print(f"Loaded: {ply_file} with {len(src.points)} points")
+    
  
     
     # Preload YOLO model once

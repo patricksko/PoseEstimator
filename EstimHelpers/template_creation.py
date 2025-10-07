@@ -3,6 +3,7 @@ import open3d as o3d
 import os
 from pathlib import Path
 
+
 def fx_from_fov(fov_deg, width):
     f = 0.5 * width / np.tan(np.deg2rad(fov_deg) / 2.0)
     return f
@@ -195,16 +196,10 @@ def sample_mesh_points(mesh, num_points=100):
 def render_lego_views(mesh_path, output_dir):
     """Main function to render 26 views of the Lego block"""
     
-    # Load and prepare the mesh
-    print("Loading Lego block mesh...")
-    #mesh_path = "./../../data/obj_000001.ply" 
-    
     if not os.path.exists(mesh_path):
         print(f"Error: Could not find {mesh_path}")
         print("Please update the mesh_path variable with the correct path to your .ply file")
         return
-    
-    os.makedirs(output_dir, exist_ok=True)
     
     mesh = o3d.io.read_triangle_mesh(mesh_path)  # read mesh 
     mesh.compute_vertex_normals() # compute vertex for better visualization
@@ -236,9 +231,8 @@ def render_lego_views(mesh_path, output_dir):
     point_cloud = sample_mesh_points(mesh, num_points=10000)
     point_cloud.paint_uniform_color([0.0, 0.0, 1.0])
     
-    # Output directory
-    #output_dir = "./../../data/lego_views"
-    
+
+    os.makedirs(output_dir, exist_ok=True)
     
     # Get camera positions
 
@@ -303,14 +297,10 @@ def render_lego_views(mesh_path, output_dir):
                    [0, -1, 0, 0],
                    [0, 0, -1, 0],
                    [0, 0, 0, 1]])
+        # OPTIONAL: move cloud into world coords if you want it there
+        T_cam_world = np.linalg.inv(T_world_cam)
+        pcd_cam.transform(T_cam_world)
 
         # save PCD (choose which frame you want)
         o3d.io.write_point_cloud(os.path.join(output_dir, f"pcd_cam_{i:02d}_{cam_pos['type']}.ply"), pcd_cam)
-
-def get_mesh_size(mesh_path):
-    """Returns the bounding box size (extent) of a mesh."""
-    mesh = o3d.io.read_triangle_mesh(mesh_path)
-    bbox = mesh.get_axis_aligned_bounding_box()
-    size = bbox.get_extent()  # [width, height, depth]
-    return size
-
+        

@@ -5,6 +5,7 @@ from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 from EstimHelpers.detection_utils import detect_mask
 from EstimHelpers.registration_utils import find_best_template_teaser
+from EstimHelpers.template_creation import render_lego_views
 import glob
 import copy
 from colorama import Fore, Style
@@ -77,12 +78,21 @@ def project_count(pts, R, t, K, D, W, H):
 
 def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max_points=250000):
     
+    # Read Pointcloud Templates and append them to list (Source)
+    ply_files = sorted(glob.glob(os.path.join(PLY_PATH, "*.ply"))) 
+    if not ply_files:
+        render_lego_views(mesh_path="./data/block_seibersdorf.ply", output_dir="./data/seibersdorf_views")
+        ply_files = sorted(glob.glob(os.path.join(PLY_PATH, "*.ply")))
+    src_clouds = []
+    for ply_file in ply_files:
+        src = o3d.io.read_point_cloud(ply_file)
+        src_clouds.append(src)
+        print(f"Loaded: {ply_file} with {len(src.points)} points")
     mesh = o3d.io.read_triangle_mesh(CAD_PATH)
 
     # Ensure normals exist (optional, helps for visualization)
-    mesh.translate(-mesh.get_center())
     mesh.compute_vertex_normals()
-    mesh.scale(0.001, center=mesh.get_center())
+    #mesh.scale(0.001, center=mesh.get_center())
     
 
     # Sample N points uniformly on the surface
