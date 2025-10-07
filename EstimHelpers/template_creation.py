@@ -37,61 +37,6 @@ def o3d_lookat(eye, target, up):
     T[:3, 3]  = -T[:3, :3] @ eye            # world->cam translation
     return T                   
 
-def crop_pointcloud_fov(pcd, fov_deg=60.0, look_dir=np.array([0, 0, 1])):
-    """
-    Crops a point cloud to simulate a camera FoV.
-    - pcd: Open3D PointCloud
-    - fov_deg: field of view in degrees
-    - look_dir: viewing direction vector (camera looks along this)
-    """
-    points = np.asarray(pcd.points)
-    look_dir = look_dir / np.linalg.norm(look_dir)
-    fov_rad = np.deg2rad(fov_deg)
-    # Compute angles between look_dir and each point vector
-    norms = np.linalg.norm(points, axis=1)
-    norms[norms == 0] = 1e-8
-    dirs = points / norms[:, None]
-    cos_angles = np.dot(dirs, look_dir)
-    mask = cos_angles > np.cos(fov_rad / 2)
-    return pcd.select_by_index(np.where(mask)[0])
-
-def crop_pointcloud_fov_hpr(pcd, camera_position=np.array([0, 0, -1]),
-                           camera_lookat=np.array([0, 0, 0]),
-                           fov_deg=60.0, radius_scale=100.0):
-    """
-    FOV + Hidden Point Removal (robust radius).
-    radius_scale: increase if you still see over-pruning (typical 20–200).
-    """
-    # View direction
-    cam_dir = camera_lookat - camera_position
-    cam_dir /= (np.linalg.norm(cam_dir) + 1e-12)
-
-    # Angular FoV prefilter
-    pts = np.asarray(pcd.points)
-    vecs = pts - camera_position
-    dist = np.linalg.norm(vecs, axis=1)
-    safe_dist = np.maximum(dist, 1e-8)
-    dirs = vecs / safe_dist[:, None]
-    cos_angles = np.dot(dirs, cam_dir)
-    mask_fov = cos_angles > np.cos(np.deg2rad(fov_deg) / 2.0)
-    idx_fov = np.where(mask_fov)[0]
-    if idx_fov.size == 0:
-        return o3d.geometry.PointCloud()  # nothing in FoV
-
-    pcd_fov = pcd.select_by_index(idx_fov)
-
-    # --- Robust radius choice ---
-    # Use the maximum distance in the *full* cloud as a baseline to avoid local underestimation
-    max_dist_full = (np.linalg.norm(pts - camera_position, axis=1).max()
-                     if len(pts) else 1.0)
-    # Make radius big (HPR becomes conservative as radius grows)
-    radius = max(1e-3, radius_scale * max_dist_full)
-
-    # HPR can still be sensitive if the camera is inside the convex hull.
-    # Keep the camera comfortably away from the object relative to its size.
-    _, visible_idx = pcd_fov.hidden_point_removal(camera_position, radius)
-    return pcd_fov.select_by_index(visible_idx)
-
 def get_axis_aligned_camera_positions(distance=0.3):
     """
     Generate camera positions that are aligned with the block's principal axes
@@ -247,17 +192,19 @@ def sample_mesh_points(mesh, num_points=100):
     """Sample points from mesh surface"""
     return mesh.sample_points_uniformly(number_of_points=num_points)
 
-def render_lego_views():
+def render_lego_views(mesh_path, output_dir):
     """Main function to render 26 views of the Lego block"""
     
     # Load and prepare the mesh
     print("Loading Lego block mesh...")
-    mesh_path = "./../../data/obj_000001.ply" 
+    #mesh_path = "./../../data/obj_000001.ply" 
     
     if not os.path.exists(mesh_path):
         print(f"Error: Could not find {mesh_path}")
         print("Please update the mesh_path variable with the correct path to your .ply file")
         return
+    
+    os.makedirs(output_dir, exist_ok=True)
     
     mesh = o3d.io.read_triangle_mesh(mesh_path)  # read mesh 
     mesh.compute_vertex_normals() # compute vertex for better visualization
@@ -290,8 +237,8 @@ def render_lego_views():
     point_cloud.paint_uniform_color([0.0, 0.0, 1.0])
     
     # Output directory
-    output_dir = "./../../data/lego_views"
-    os.makedirs(output_dir, exist_ok=True)
+    #output_dir = "./../../data/lego_views"
+    
     
     # Get camera positions
 
@@ -356,12 +303,14 @@ def render_lego_views():
                    [0, -1, 0, 0],
                    [0, 0, -1, 0],
                    [0, 0, 0, 1]])
-        # OPTIONAL: move cloud into world coords if you want it there
-        T_cam_world = np.linalg.inv(T_world_cam)
-        pcd_world = pcd_cam.transform(T_cam_world)
 
         # save PCD (choose which frame you want)
         o3d.io.write_point_cloud(os.path.join(output_dir, f"pcd_cam_{i:02d}_{cam_pos['type']}.ply"), pcd_cam)
-        # o3d.io.write_point_cloud(os.path.join(output_dir, f"pcd_world_{i:02d}_{cam_pos['type']}.ply"), pcd_world)
-if __name__ == "__main__":
-    render_lego_views()
+
+def get_mesh_size(mesh_path):
+    """Returns the bounding box size (extent) of a mesh."""
+    mesh = o3d.io.read_triangle_mesh(mesh_path)
+    bbox = mesh.get_axis_aligned_bounding_box()
+    size = bbox.get_extent()  # [width, height, depth]
+    return size
+

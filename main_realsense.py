@@ -2,6 +2,7 @@ import numpy as np                        # fundamental package for scientific c
 import matplotlib.pyplot as plt           # 2D plotting library producing publication quality figures
 import pyrealsense2 as rs                 # Intel RealSense cross-platform open-source API
 from EstimHelpers.HelpersRealtime import *
+from EstimHelpers.template_creation import render_lego_views, sanity_check
 from ultralytics import YOLO
 import time
 from colorama import Fore, Style
@@ -44,25 +45,23 @@ def main():
 
     # Read CAD Model for comparision
     cad_model = o3d.io.read_point_cloud(CAD_PATH)
-    cad_model.scale(0.001, center=cad_model.get_center())
-    cad_model.translate(-cad_model.get_center())
     cad_points = np.asarray(cad_model.points)
 
     # Read CAD Model for later Rendering 
     mesh = o3d.io.read_triangle_mesh(CAD_PATH)
     mesh.compute_vertex_normals()
-    mesh.translate(-mesh.get_center())
-    mesh.scale(0.001, center=mesh.get_center())
 
     #Preload Templates for Template matching
     ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
     if not ply_files:
-            raise RuntimeError(f"No PLYs in {PCD_PATH}")
+        render_lego_views(mesh_path="./data/obj_000001.ply", output_dir="./data/lego_views")
+        ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
     src_clouds = []
     for ply_file in ply_files:
         src = o3d.io.read_point_cloud(ply_file)
         src_clouds.append(src)
         print(f"Loaded: {ply_file} with {len(src.points)} points")
+ 
     
     # Preload YOLO model once
     yolo_model = YOLO(WEIGHTS_PATH)
@@ -75,10 +74,7 @@ def main():
     renderer = None
     scene = None
     render_w = render_h = None
-    poses = []
-    xyz_list = []
-    rpy_list = []
-    stats_plotted = False
+  
     
     try:
         while True:

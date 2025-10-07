@@ -38,7 +38,7 @@ num_targets = json_config['dataset']['num_targets']
 bproc.init()
 
 # load bop objects into the scene
-target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock_full'), model_type = 'cad', object_model_unit='mm')
+target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock_full'), model_type = 'cad', object_model_unit='m')
 for obj in target_bop_objs:
     size_m = obj.blender_obj.dimensions
     print(f"{obj.get_name()} size: {size_m} m ({size_m*1000} mm)")
