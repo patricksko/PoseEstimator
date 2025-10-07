@@ -173,7 +173,7 @@ def get_axis_aligned_camera_positions(distance=0.3):
         })
     
     return positions  # Total: 26 positions
-def get_reduced_camera_positions(distance=0.3):
+def get_reduced_camera_positions(distance):
     """
     Generate 11 unique camera positions for a Lego block with axes:
     - Y: up (top/bottom)
@@ -252,27 +252,39 @@ def render_lego_views():
     
     # Load and prepare the mesh
     print("Loading Lego block mesh...")
-    mesh_path = "./../../data/block_seibersdorf.ply"  # Update path as needed
+    mesh_path = "./../../data/obj_000001.ply" 
     
     if not os.path.exists(mesh_path):
         print(f"Error: Could not find {mesh_path}")
         print("Please update the mesh_path variable with the correct path to your .ply file")
         return
     
-    mesh = o3d.io.read_triangle_mesh(mesh_path)
-    
+    mesh = o3d.io.read_triangle_mesh(mesh_path)  # read mesh 
+    mesh.compute_vertex_normals() # compute vertex for better visualization
+
+    bbox = mesh.get_axis_aligned_bounding_box()
+    print("maximum bounds =", bbox.max_bound)
+    print("minimum bounds =", bbox.min_bound)
+    size = bbox.max_bound - bbox.min_bound  #get the approximate size of the object
+
+    if np.max(size) < 1:
+        whatdim = "m"
+        print("Dimension of object is in m", size)
+    else:
+        mesh.scale(0.001, center=mesh.get_center())
+        bbox = mesh.get_axis_aligned_bounding_box()
+        print("Dimension of object is in mm", size)
+        whatdim = "mm"
+ 
+    diag = np.linalg.norm(bbox.get_extent())  # size of mesh diagonal
+    distance = diag * 2.0   # put camera 2x diagonal away
+ 
+    camera_positions = get_reduced_camera_positions(distance=distance)
     # Center the mesh at origin
-    mesh.translate(-mesh.get_center())
-    
-    
-    # Compute vertex normals for better visualization
-    mesh.compute_vertex_normals()
+    #mesh.translate(-mesh.get_center())
     
     # Set blue color for the mesh
     mesh.paint_uniform_color([0.0, 0.0, 1.0])
-    
-    print(f"Mesh bounds: {mesh.get_axis_aligned_bounding_box()}")
-    print(f"Mesh center: {mesh.get_center()}")
     
     # Sample points from the mesh for point cloud operations
     print("Sampling points from mesh...")
@@ -280,15 +292,12 @@ def render_lego_views():
     point_cloud.paint_uniform_color([0.0, 0.0, 1.0])
     
     # Output directory
-    output_dir = "./../../data/seibersdorf_views"
+    output_dir = "./../../data/lego_views"
     os.makedirs(output_dir, exist_ok=True)
     
     # Get camera positions
-    mesh.scale(0.001, center=mesh.get_center())
-    bbox = mesh.get_axis_aligned_bounding_box()
-    diag = np.linalg.norm(bbox.get_extent())  # size of mesh diagonal
-    distance = diag * 2.0   # put camera 2x diagonal away
-    camera_positions = get_reduced_camera_positions(distance=distance)
+
+    
     
     print(f"Generating {len(camera_positions)} views:")
     print(f"- {sum(1 for p in camera_positions if p['type'] == 'face')} face views")
@@ -317,7 +326,7 @@ def render_lego_views():
 
     # camera intrinsics
     intr = o3d.camera.PinholeCameraIntrinsic(w, h, fx, fy, cx, cy)
-    near, far = 0.01, 5.0
+    near, far = 0.001, distance * 3
     K = intr.intrinsic_matrix  # 3x3 numpy array
     scene.camera.set_projection(K, near, far, w, h)
 
