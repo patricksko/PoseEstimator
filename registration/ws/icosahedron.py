@@ -7,6 +7,24 @@ def fx_from_fov(fov_deg, width):
     f = 0.5 * width / np.tan(np.deg2rad(fov_deg) / 2.0)
     return f
 
+def sample_n_points(pcd, n=200):
+    pts = np.asarray(pcd.points)
+    if pts.shape[0] <= n:
+        return pcd  # nothing to do
+    
+    idx = np.random.choice(pts.shape[0], n, replace=False)
+    
+    sampled_pcd = o3d.geometry.PointCloud()
+    sampled_pcd.points = o3d.utility.Vector3dVector(pts[idx])
+    
+    if pcd.has_colors():
+        colors = np.asarray(pcd.colors)[idx]
+        sampled_pcd.colors = o3d.utility.Vector3dVector(colors)
+    if pcd.has_normals():
+        normals = np.asarray(pcd.normals)[idx]
+        sampled_pcd.normals = o3d.utility.Vector3dVector(normals)
+    
+    return sampled_pcd
 def o3d_lookat(eye, target, up):
     eye    = np.asarray(eye, dtype=float)
     target = np.asarray(target, dtype=float)
@@ -172,7 +190,7 @@ def get_reduced_camera_positions(distance=0.3):
     for d, name in face_dirs:
         positions.append({
             'eye': d * distance,
-            'target': np.array([0, 0, 0]),
+            'target': np.array([0,0,0]),
             'up': np.array([0, 0, 1]),  # Y is up
             'type': name
         })
@@ -225,7 +243,7 @@ def get_reduced_camera_positions(distance=0.3):
     return positions  # total: 14
 
 
-def sample_mesh_points(mesh, num_points=50000):
+def sample_mesh_points(mesh, num_points=100):
     """Sample points from mesh surface"""
     return mesh.sample_points_uniformly(number_of_points=num_points)
 
@@ -244,7 +262,8 @@ def render_lego_views():
     mesh = o3d.io.read_triangle_mesh(mesh_path)
     
     # Center the mesh at origin
-    #mesh.translate(-mesh.get_center())
+    mesh.translate(-mesh.get_center())
+    
     
     # Compute vertex normals for better visualization
     mesh.compute_vertex_normals()
@@ -257,7 +276,7 @@ def render_lego_views():
     
     # Sample points from the mesh for point cloud operations
     print("Sampling points from mesh...")
-    point_cloud = sample_mesh_points(mesh, num_points=50000)
+    point_cloud = sample_mesh_points(mesh, num_points=100)
     point_cloud.paint_uniform_color([0.0, 0.0, 1.0])
     
     # Output directory
@@ -265,7 +284,11 @@ def render_lego_views():
     os.makedirs(output_dir, exist_ok=True)
     
     # Get camera positions
-    camera_positions = get_reduced_camera_positions(distance=1.5)
+    mesh.scale(0.001, center=mesh.get_center())
+    bbox = mesh.get_axis_aligned_bounding_box()
+    diag = np.linalg.norm(bbox.get_extent())  # size of mesh diagonal
+    distance = diag * 2.0   # put camera 2x diagonal away
+    camera_positions = get_reduced_camera_positions(distance=distance)
     
     print(f"Generating {len(camera_positions)} views:")
     print(f"- {sum(1 for p in camera_positions if p['type'] == 'face')} face views")
@@ -285,6 +308,12 @@ def render_lego_views():
     mat = o3d.visualization.rendering.MaterialRecord()
     mat.shader = "defaultLit"
     scene.add_geometry("mesh", mesh, mat)
+
+    # axis = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    #     size=diag * 0.5,
+    #     origin=[0, 0, 0]
+    # )
+    # scene.add_geometry("axis", axis, mat)
 
     # camera intrinsics
     intr = o3d.camera.PinholeCameraIntrinsic(w, h, fx, fy, cx, cy)
@@ -315,6 +344,7 @@ def render_lego_views():
             color_img, depth_img, depth_scale=1.0, depth_trunc=far, convert_rgb_to_intensity=False
         )
         pcd_cam = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intr)  # points in camera coords
+        pcd_cam = sample_n_points(pcd_cam, 200)
         pcd_cam.transform([[1, 0, 0, 0],
                    [0, -1, 0, 0],
                    [0, 0, -1, 0],

@@ -384,6 +384,8 @@ def camera_eye_lookat_up_from_H(H):
 
     target = eye + forward
     up = up / (np.linalg.norm(up) + 1e-12)
+
+    
     return eye, target, up
 
 

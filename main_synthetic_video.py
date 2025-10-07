@@ -34,10 +34,15 @@ def main():
         raise RuntimeError(f"No PLYs in {TEMPLATES_DIR}")
     templates = [o3d.io.read_point_cloud(p) for p in template_paths]
     cad_model = o3d.io.read_point_cloud(CAD_MODEL_PLY)
+    cad_model.translate(-cad_model.get_center())
+    cad_model.scale(0.001, center=cad_model.get_center())
     cad_points = np.asarray(cad_model.points)
+    
 
     mesh = o3d.io.read_triangle_mesh(CAD_MODEL_PLY)
+    mesh.translate(-mesh.get_center())
     mesh.compute_vertex_normals()
+    mesh.scale(0.001, center=mesh.get_center())
 
     yolo = YOLO(YOLO_WEIGHTS)
 

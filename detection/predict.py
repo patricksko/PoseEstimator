@@ -48,7 +48,7 @@ def generate_segmentation_polygons_yolo_format(weights_path, image_path, output_
 
 if __name__ == "__main__":
     weights = "/home/skoumal/dev/ObjectDetection/data/best.pt"
-    img_path = "/home/skoumal/dev/ObjectDetection/data/scan2.png"
+    img_path = "/home/skoumal/dev/ObjectDetection/data/seibersdorf/images_rgb/002001/002001_000000.jpg"
     out_dir = "/home/skoumal/dev/ObjectDetection/data/"
 
     generate_segmentation_polygons_yolo_format(weights, img_path, out_dir)

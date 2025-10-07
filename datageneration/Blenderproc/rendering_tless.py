@@ -39,6 +39,9 @@ bproc.init()
 
 # load bop objects into the scene
 target_bop_objs = bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(bop_dataset_path, 'Legoblock_full'), model_type = 'cad', object_model_unit='mm')
+for obj in target_bop_objs:
+    size_m = obj.blender_obj.dimensions
+    print(f"{obj.get_name()} size: {size_m} m ({size_m*1000} mm)")
 
 # SOLUTION 1: Set all Lego blocks to have the same category_id
 # This ensures they're treated as the same class
@@ -209,11 +212,11 @@ for i in range(num_scenes):
     data = bproc.renderer.render()
     obj2world_dict = {}
 
-    for obj in sampled_target_bop_objs + sampled_distractor_bop_objs:
-        T_obj2world = obj.get_local2world_mat()
-        # convert translation to mm
-        T_obj2world[:3, 3] *= 1000.0
-        obj2world_dict[obj.get_name()] = T_obj2world.tolist()
+    # for obj in sampled_target_bop_objs + sampled_distractor_bop_objs:
+    #     T_obj2world = obj.get_local2world_mat()
+    #     # convert translation to mm
+    #     T_obj2world[:3, 3] *= 1000.0
+    #     obj2world_dict[obj.get_name()] = T_obj2world.tolist()
 
     # save to file
     # with open(Path(output_dir) / f"scene_{i:06d}_obj2world.json", "w") as f:

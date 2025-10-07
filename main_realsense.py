@@ -44,11 +44,15 @@ def main():
 
     # Read CAD Model for comparision
     cad_model = o3d.io.read_point_cloud(CAD_PATH)
+    cad_model.scale(0.001, center=cad_model.get_center())
+    cad_model.translate(-cad_model.get_center())
     cad_points = np.asarray(cad_model.points)
 
     # Read CAD Model for later Rendering 
     mesh = o3d.io.read_triangle_mesh(CAD_PATH)
     mesh.compute_vertex_normals()
+    mesh.translate(-mesh.get_center())
+    mesh.scale(0.001, center=mesh.get_center())
 
     #Preload Templates for Template matching
     ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
@@ -160,7 +164,7 @@ def main():
             all = time.time()
             # Projection (intrinsics) for this frame
             start = time.time()
-            near, far = 0.01, 2.0
+            near, far = 0.01, 5.0
             scene.camera.set_projection(K, near, far, render_w, render_h)
 
             # Extrinsics from current T_m2c
@@ -175,6 +179,7 @@ def main():
                 color_img, depth_img, depth_scale=1.0, depth_trunc=far, convert_rgb_to_intensity=False
             )
             src = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, o3d_intrinsics_from_rs(intr))
+            
             timer_print(start, "Rendering")
 
             start = time.time()
@@ -198,6 +203,12 @@ def main():
                     color_o3d, depth_o3d, depth_scale=1.0, convert_rgb_to_intensity=False
                 )
                 dst_cloud = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, o3d_intrinsics_from_rs(intr))
+                # o3d.visualization.draw_geometries([
+                #     src.paint_uniform_color([0, 1, 1]),
+                #     dst_cloud.paint_uniform_color([1, 1, 0])
+                    
+                # ], window_name="Init registration (ENTER=accept, SPACE=reject)")
+                # exit()
                 timer_print(start, "RGB Kamera")
                 start = time.time()
                 dst_down, _ = preprocess_point_cloud_uniform(dst_cloud, TARGET_PTS, False)

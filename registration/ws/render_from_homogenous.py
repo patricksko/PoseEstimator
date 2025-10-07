@@ -60,6 +60,8 @@ def render_lego_views():
 
     mesh = o3d.io.read_triangle_mesh(mesh_path)
     mesh.compute_vertex_normals()
+    mesh.scale(0.001, center=mesh.get_center())
+    mesh.translate(-mesh.get_center())
 
     # ------------------------
     # Example H (from dataset)
@@ -106,6 +108,7 @@ def render_lego_views():
     os.makedirs(output_dir, exist_ok=True)
 
     color_img = renderer.render_to_image()
+    
     depth_img = renderer.render_to_depth_image(z_in_view_space=True)
 
     rgb_path   = os.path.join(output_dir, f"rgb.png")

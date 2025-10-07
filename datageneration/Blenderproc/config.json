@@ -41,10 +41,10 @@
       }
     },
     "dataset": {
-      "num_cameras": 25,
-      "num_scenes": 2000,
-      "num_distractors": 2,
-      "num_targets": 20,
+      "num_cameras": 1,
+      "num_scenes": 1,
+      "num_distractors": 0,
+      "num_targets": 1,
       "pose": true,
       "detection": true,
       "empty_images_per_scene": 0,

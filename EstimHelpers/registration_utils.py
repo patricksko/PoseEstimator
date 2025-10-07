@@ -49,7 +49,7 @@ def load_camera_intrinsics(scene_camera_path, frame_id, image_width, image_heigh
         cx=cx,
         cy=cy
     )
-    return intrinsic, depth_scale
+    return intrinsic, depth_scale, cam_K
 
 def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     depth_raw = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 1000.0
@@ -66,7 +66,7 @@ def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     color_raw = cv2.cvtColor(color_raw, cv2.COLOR_BGR2RGB)
     
     h, w = depth_raw.shape
-    intrinsic, depth_scale = load_camera_intrinsics(scene_camera_path, 0, w, h)
+    intrinsic, depth_scale, K = load_camera_intrinsics(scene_camera_path, 0, w, h)
     depth_raw = depth_raw * depth_scale
     
     masked_depth = np.where(binary_mask, depth_raw, 0.0)
@@ -92,7 +92,7 @@ def get_pointcloud(depth_path, rgb_path, scene_camera_path, mask):
     if len(pcd.points) > 0:
         pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
     
-    return pcd
+    return pcd, K
 
 
 def uniform_downsample_farthest_point(pcd, target_points=2000):

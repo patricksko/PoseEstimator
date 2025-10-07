@@ -14,7 +14,25 @@ WEIGHTS = "./data/best.pt"
 PLY_PATH = "./data/seibersdorf_views/"
 CAD_PATH = "./data/block_seibersdorf.ply"
 
+def print_cloud_info(name, cloud):
+    if isinstance(cloud, o3d.geometry.PointCloud):
+        pts = np.asarray(cloud.points)
+    elif isinstance(cloud, o3d.geometry.TriangleMesh):
+        pts = np.asarray(cloud.vertices)
+    else:
+        raise ValueError("Unsupported geometry type")
 
+    if pts.shape[0] == 0:
+        print(f"{name}: EMPTY")
+        return
+
+    bbox = cloud.get_axis_aligned_bounding_box()
+    extents = bbox.get_extent()  # size along x,y,z
+    print(f"{name}:")
+    print(f"  Num points: {pts.shape[0]}")
+    print(f"  Center: {bbox.get_center()}")
+    print(f"  Extents: {extents} (x,y,z)")
+    print(f"  Diagonal length: {np.linalg.norm(extents)}")
 def project_points(points_3d, K, T_m2c):
     """Project 3D points into image pixels."""
     pts_h = np.hstack((points_3d, np.ones((points_3d.shape[0], 1))))  # Nx4
@@ -59,14 +77,25 @@ def project_count(pts, R, t, K, D, W, H):
 
 def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max_points=250000):
     
-    # Read CAD Model for comparision
-    cad_model = o3d.io.read_point_cloud(CAD_PATH)
-    cad_points = np.asarray(cad_model.points)
+    mesh = o3d.io.read_triangle_mesh(CAD_PATH)
 
+    # Ensure normals exist (optional, helps for visualization)
+    mesh.translate(-mesh.get_center())
+    mesh.compute_vertex_normals()
+    mesh.scale(0.001, center=mesh.get_center())
+    
+
+    # Sample N points uniformly on the surface
+    pcd = mesh.sample_points_uniformly(number_of_points=1000)
+    print_cloud_info("CAD source", pcd)
+
+    cad_points = np.asarray(pcd.points)
+    print("Sampled CAD points:", cad_points.shape)
+    
     img_bgr = cv2.imread(image_path, cv2.IMREAD_COLOR)
     if img_bgr is None: raise SystemExit(f"Failed to read image: {image_path}")
     img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB); H, W = img.shape[:2]
-    img_arr = np.asarray(img)
+    img_arr = np.asarray(img_bgr)
     mask = detect_mask(WEIGHTS, img)   # Detect mask of Object with YOLO Network
 
     # Cloud
@@ -111,6 +140,7 @@ def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max
     pcd_col = o3d.geometry.PointCloud()
     pcd_col.points = o3d.utility.Vector3dVector(pts_col)
     pcd_col.colors = o3d.utility.Vector3dVector(colors)
+    print_cloud_info("Scene target", pcd_col)
     o3d.visualization.draw([pcd_col], bg_color=(0, 0, 0, 1))
 
     # Read Pointcloud Templates and append them to list (Source)
@@ -126,11 +156,7 @@ def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max
             print("Failed to generate scene point cloud!")
             exit(1)
     
-    o3d.visualization.draw_geometries([
-        src_clouds[4].paint_uniform_color([0, 1, 1]),
-        dst_cloud.paint_uniform_color([0, 1, 0])
-    ], window_name="ICP Refined Registration")
-    exit()
+
     best_idx, H, best_inliers, all_metrics = find_best_template_teaser(dst_cloud, src_clouds, target_points=100)
     for m in all_metrics:
         print(f"Template {m['template_idx']}: Chamfer = {m['score']:.6f}")
@@ -145,12 +171,14 @@ def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max
     print("\n7. Visualization...")
   
     o3d.visualization.draw_geometries([
-        src_cloud.paint_uniform_color([0, 1, 1]),
-        dst_cloud.paint_uniform_color([0, 1, 0])
+        src_cloud.paint_uniform_color([1, 0, 0]),
+        dst_cloud.paint_uniform_color([0, 1, 1])
     ], window_name="ICP Refined Registration")
 
-
-    uv = project_points(cad_points, K, H)
+    T_m2c = np.linalg.inv(T)@H
+    
+    uv = project_points(cad_points, K, T_m2c)
+   
     for (u, v) in uv:
         if 0 <= u < img_arr.shape[1] and 0 <= v < img_arr.shape[0]:
             cv2.circle(img_arr, (u, v), 1, (0, 0, 255), -1)  # red dots
@@ -168,5 +196,5 @@ if __name__ == "__main__":
         cloud_path="./data/seibersdorf/export_pointclouds_01/cloud_1752488483100407156.ply",
         calib_path="./data/seibersdorf/calib.yaml",
         save_path="./data/seibersdorf/colored_cloud.ply",
-        max_points=200000
+        max_points=20000000
     )
