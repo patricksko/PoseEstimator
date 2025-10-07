@@ -65,7 +65,7 @@ if __name__ == "__main__":
             exit(1)
 
     K = np.asarray(K).reshape(3,3)
-    best_idx, H, best_inliers, all_metrics = find_best_template_teaser(dst_cloud, src_clouds, target_points=200)
+    best_idx, H, best_inliers, all_metrics = find_best_template_teaser(dst_cloud, src_clouds, target_points=400)
     for m in all_metrics:
         print(f"Template {m['template_idx']}: Chamfer = {m['score']:.6f}")
     print(best_idx)
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     
     T_m2c_est = H
     R_m2c_est = np.array(T_m2c_est[:3, :3]).reshape(3, 3)
-    t_m2c_est = np.array(T_m2c_est[:3, 3]).reshape(3) * 1000.0  # <-- mm → m
+    t_m2c_est = np.array(T_m2c_est[:3, 3]).reshape(3) * 1000.0  # <-- m → mm
 
     T_m2c_est = np.eye(4)
     T_m2c_est[:3, :3] = R_m2c_est
@@ -136,7 +136,9 @@ if __name__ == "__main__":
     # Read CAD Model for comparision
     cad_model = o3d.io.read_point_cloud(PLY)
     cad_points = np.asarray(cad_model.points)
+    cad_model.scale(1000, center=cad_model.get_center())
 
+   
     uv = project_points(cad_points, K, T_m2c_est)
     for (u, v) in uv:
         if 0 <= u < color.shape[1] and 0 <= v < color.shape[0]:
