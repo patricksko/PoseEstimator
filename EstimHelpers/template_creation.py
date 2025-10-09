@@ -38,87 +38,7 @@ def o3d_lookat(eye, target, up):
     T[:3, 3]  = -T[:3, :3] @ eye            # world->cam translation
     return T                   
 
-def get_axis_aligned_camera_positions(distance=0.3):
-    """
-    Generate camera positions that are aligned with the block's principal axes
-    to ensure 90-degree views of faces, edges, and corners.
-    """
-    positions = []
-    
-    # 1. Face-aligned views (6 positions) - looking directly at each face
-    face_directions = [
-        np.array([1, 0, 0]),   # +X face (right)
-        np.array([-1, 0, 0]),  # -X face (left)
-        np.array([0, 1, 0]),   # +Y face (top)
-        np.array([0, -1, 0]),  # -Y face (bottom)
-        np.array([0, 0, 1]),   # +Z face (front)
-        np.array([0, 0, -1])   # -Z face (back)
-    ]
-    
-    for direction in face_directions:
-        positions.append({
-            'eye': direction * distance,
-            'target': np.array([0, 0, 0]),
-            'up': np.array([0, 1, 0]) if abs(direction[1]) < 0.9 else np.array([0, 0, 1]),
-            'type': 'face'
-        })
-    
-    # 2. Edge-aligned views (12 positions) - looking along edges
-    edge_directions = [
-        # XY plane edges (4)
-        np.array([1, 1, 0]),    # +X+Y edge
-        np.array([1, -1, 0]),   # +X-Y edge
-        np.array([-1, 1, 0]),   # -X+Y edge
-        np.array([-1, -1, 0]),  # -X-Y edge
-        # XZ plane edges (4)
-        np.array([1, 0, 1]),    # +X+Z edge
-        np.array([1, 0, -1]),   # +X-Z edge
-        np.array([-1, 0, 1]),   # -X+Z edge
-        np.array([-1, 0, -1]),  # -X-Z edge
-        # YZ plane edges (4)
-        np.array([0, 1, 1]),    # +Y+Z edge
-        np.array([0, 1, -1]),   # +Y-Z edge
-        np.array([0, -1, 1]),   # -Y+Z edge
-        np.array([0, -1, -1])   # -Y-Z edge
-    ]
-    
-    for direction in edge_directions:
-        direction_norm = direction / np.linalg.norm(direction)
-        # Choose appropriate up vector
-        if abs(direction_norm[1]) < 0.9:
-            up_vec = np.array([0, 1, 0])
-        else:
-            up_vec = np.array([0, 0, 1])
-            
-        positions.append({
-            'eye': direction_norm * distance,
-            'target': np.array([0, 0, 0]),
-            'up': up_vec,
-            'type': 'edge'
-        })
-    
-    # 3. Corner-aligned views (8 positions) - looking at corners
-    corner_directions = [
-        np.array([1, 1, 1]),     # +++
-        np.array([1, 1, -1]),    # ++-
-        np.array([1, -1, 1]),    # +-+
-        np.array([1, -1, -1]),   # +--
-        np.array([-1, 1, 1]),    # -++
-        np.array([-1, 1, -1]),   # -+-
-        np.array([-1, -1, 1]),   # --+
-        np.array([-1, -1, -1])   # ---
-    ]
-    
-    for direction in corner_directions:
-        direction_norm = direction / np.linalg.norm(direction)
-        positions.append({
-            'eye': direction_norm * distance,
-            'target': np.array([0, 0, 0]),
-            'up': np.array([0, 1, 0]),
-            'type': 'corner'
-        })
-    
-    return positions  # Total: 26 positions
+
 def get_reduced_camera_positions(distance):
     """
     Generate 11 unique camera positions for a Lego block with axes:
@@ -131,7 +51,7 @@ def get_reduced_camera_positions(distance):
     # --- Faces (4) ---
     face_dirs = [
         (np.array([0,  1,  0]), '0'),
-        (np.array([0, -1,  0]), '1'),
+        #(np.array([0, -1,  0]), '1'),
     ]
     for d, name in face_dirs:
         positions.append({
@@ -141,25 +61,25 @@ def get_reduced_camera_positions(distance):
             'type': name
         })
 
-    face_dirs = [
-        (np.array([1,  0,  0]), '2'),
-        (np.array([0,  0,  1]), '3')
-    ]
-    for d, name in face_dirs:
-        positions.append({
-            'eye': d * distance,
-            'target': np.array([0, 0, 0]),
-            'up': np.array([0, 1, 0]),  # Y is up
-            'type': name
-        })
+    # face_dirs = [
+    #     (np.array([1,  0,  0]), '2'),
+    #     (np.array([0,  0,  1]), '3')
+    # ]
+    # for d, name in face_dirs:
+    #     positions.append({
+    #         'eye': d * distance,
+    #         'target': np.array([0, 0, 0]),
+    #         'up': np.array([0, 1, 0]),  # Y is up
+    #         'type': name
+    #     })
     # --- Edges (4) ---
     edge_dirs = [
         (np.array([ 1,  1, 0]), '4'),
-        (np.array([ 1, -1, 0]), '5'),
+        #(np.array([ 1, -1, 0]), '5'),
         (np.array([ 0,  1, 1]), '6'),
-        (np.array([ 0, -1, 1]), '7'),
-        (np.array([ 1, 0, 1]), '8'),
-        (np.array([ 1, 0, -1]), '9')
+        #(np.array([ 0, -1, 1]), '7'),
+        #(np.array([ 1, 0, 1]), '8'),
+        #(np.array([ 1, 0, -1]), '9')
     ]
     for d, name in edge_dirs:
         d = d / np.linalg.norm(d)
@@ -174,8 +94,8 @@ def get_reduced_camera_positions(distance):
     corner_dirs = [
         (np.array([ 1,  1, -1]), '10'),
         (np.array([ 1,  1,  1]), '11'),
-        (np.array([ 1, -1,  1]), '12'),
-        (np.array([ 1, -1, -1]), '13')
+        #(np.array([ 1, -1,  1]), '12'),
+        #(np.array([ 1, -1, -1]), '13')
     ]
     for d, name in corner_dirs:
         d = d / np.linalg.norm(d)
