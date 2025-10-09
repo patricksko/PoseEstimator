@@ -8,6 +8,48 @@ import json
 import os
 import glob
 import time
+import pyrealsense2 as rs 
+from dataclasses import dataclass
+
+
+def enforce_upright_pose_y_up(T):
+    """
+    Align model's local +Y (stud direction) with world +Y (up).
+    Handles arbitrary tilt (not just upside-down).
+    """
+    T = np.array(T, copy=True)
+    R = T[:3, :3]
+
+    # current up vector in world coords
+    up_local = R[:, 1]
+    world_up = np.array([0, 1, 0], dtype=np.float64)
+
+    # if already mostly aligned, skip
+    cos_angle = np.dot(up_local, world_up) / (np.linalg.norm(up_local) + 1e-8)
+    if abs(cos_angle) > 0.999:
+        return T  # already upright
+
+    # rotation axis = cross product between current up and desired up
+    axis = np.cross(up_local, world_up)
+    axis_norm = np.linalg.norm(axis)
+    if axis_norm < 1e-8:
+        # up_local is opposite to world_up → rotate 180° around X
+        axis = np.array([1, 0, 0])
+        angle = np.pi
+    else:
+        axis = axis / axis_norm
+        angle = np.arccos(np.clip(cos_angle, -1.0, 1.0))
+
+    # Rodrigues' rotation formula to get correction rotation
+    K = np.array([[0, -axis[2], axis[1]],
+                  [axis[2], 0, -axis[0]],
+                  [-axis[1], axis[0], 0]])
+    R_correction = np.eye(3) + np.sin(angle)*K + (1 - np.cos(angle))*(K @ K)
+
+    # Apply correction
+    R_fixed = R_correction @ R
+    T[:3, :3] = R_fixed
+    return T
 
 def uniform_downsample_farthest_point(pcd, target_points=500):
     """
@@ -82,108 +124,6 @@ def run_teaser(source, target, correspondences, noise_bound_m=0.001):
     solver.solve(src_corr, tgt_corr)
     sol = solver.getSolution()
 
-    R_inliers = list(solver.getRotationInliers() or [])
-    s_inliers = list(solver.getScaleInliers() or [])
-    t_inliers = list(solver.getTranslationInliers() or [])
-
-    R = np.asarray(sol.rotation)
-    t = np.asarray(sol.translation).reshape((3, 1))
-    T = np.eye(4)
-    T[:3, :3] = R
-    T[:3, 3:] = t
-    return T, R_inliers, s_inliers, t_inliers
-
-
-def chamfer_distance(src, dst):
-    d1 = src.compute_point_cloud_distance(dst)
-    d2 = dst.compute_point_cloud_distance(src)
-    # symmetric mean
-    return float(np.mean(d1) + np.mean(d2))
-
-
-
-def centroid_of(pcd: o3d.geometry.PointCloud) -> np.ndarray:
-    pts = np.asarray(pcd.points)
-    if pts.size == 0:
-        return np.zeros(3)
-    return pts.mean(axis=0)
-
-def pca_axes(pcd: o3d.geometry.PointCloud):
-    """
-    Returns:
-      R (3x3): columns are principal directions (X=col0, Y=col1, Z=col2)
-      s (3,) : singular values (sqrt eigenvalues) proportional to std along each axis
-    Columns sorted by decreasing variance. Ensures right-handed basis (det=+1).
-    """
-    P = np.asarray(pcd.points)
-    C = P.mean(axis=0, keepdims=True)
-    X = P - C
-    # covariance
-    cov = (X.T @ X) / max(len(P) - 1, 1)
-    vals, vecs = np.linalg.eigh(cov)           # eigenvalues ascending
-    order = vals.argsort()[::-1]               # descending
-    vals = vals[order]
-    R = vecs[:, order]
-    # right-handedness: flip third axis if needed
-    if np.linalg.det(R) < 0:
-        R[:, 2] *= -1.0
-    s = np.sqrt(np.maximum(vals, 0.0))
-    return R, s
-
-
-
-def initial_align_centroid_pca(src: o3d.geometry.PointCloud,
-                               dst: o3d.geometry.PointCloud) -> np.ndarray:
-    """
-    Build a rigid transform T0 that:
-      - aligns src centroid to dst centroid
-      - aligns src PCA axes to dst PCA axes (with sign fixes)
-    """
-    c_s = centroid_of(src)
-    c_d = centroid_of(dst)
-
-    R_s, _ = pca_axes(src)
-    R_d, _ = pca_axes(dst)
-
-    R_s_adj = R_s.copy()
-    for i in range(3):
-        if np.dot(R_s[:, i], R_d[:, i]) < 0:
-            R_s_adj[:, i] *= -1.0
-    # recompute right-handed
-    if np.linalg.det(R_s_adj) < 0:
-        R_s_adj[:, 2] *= -1.0
-
-    # rotation mapping src->dst
-    R0 = R_d @ R_s_adj.T
-    # translation to map centroids
-    t0 = c_d - R0 @ c_s
-
-    T0 = np.eye(4)
-    T0[:3, :3] = R0
-    T0[:3, 3] = t0
-    return T0
-
-
-def run_teaser(source, target, correspondences, noise_bound_m=0.001):
-    if len(correspondences) < 3:
-        return np.eye(4), [], [], []
-
-    src_corr = np.array([source.points[i] for i, _ in correspondences]).T  # 3xN
-    tgt_corr = np.array([target.points[j] for _, j in correspondences]).T  # 3xN
-
-    params = tpp.RobustRegistrationSolver.Params()
-    params.cbar2 = 1
-    params.noise_bound = float(noise_bound_m)
-    params.estimate_scaling = False
-    params.rotation_estimation_algorithm = tpp.RotationEstimationAlgorithm.GNC_TLS
-    params.rotation_gnc_factor = 1.4
-    params.rotation_max_iterations = 100
-    params.rotation_cost_threshold = 1e-12
-
-    solver = tpp.RobustRegistrationSolver(params)
-    solver.solve(src_corr, tgt_corr)
-    sol = solver.getSolution()
-
     R = np.asarray(sol.rotation)
     t = np.asarray(sol.translation).reshape((3, 1))
     T = np.eye(4)
@@ -198,38 +138,6 @@ def chamfer_distance(src, dst):
     return float(np.mean(d1) + np.mean(d2))
 
 
-
-def detect_mask(model, img_bgr, class_id=0, conf=0.8, imgsz=512):
-    h, w = img_bgr.shape[:2]
-    mask = np.zeros((h, w), dtype=np.uint8)
-    results = model(source=img_bgr, imgsz=imgsz, conf=conf, device="0", save=False, verbose=False)
-    # if results[0].boxes is None or len(results[0].boxes) == 0:
-    #     print("No bounding boxes detected. Exiting...")
-    #     exit()  # or return if inside a function
-    for r in results:
-        if not hasattr(r, "masks") or r.masks is None:
-            continue
-        for seg, cls in zip(r.masks.xy, r.boxes.cls):
-            
-            if int(cls) != class_id: 
-                continue
-            poly = np.array(seg, dtype=np.int32)
-            cv2.fillPoly(mask, [poly], 255)
-            return mask    # first match
-    return mask
-
-def rs_get_intrinsics(profile):
-    color_stream = profile.get_stream(rs.stream.color).as_video_stream_profile()
-    intr = color_stream.get_intrinsics()
-    K = np.array([[intr.fx, 0,         intr.ppx],
-                  [0,        intr.fy,   intr.ppy],
-                  [0,        0,         1       ]], dtype=np.float32)
-    return intr, K
-
-def o3d_intrinsics_from_rs(intr):
-    return o3d.camera.PinholeCameraIntrinsic(
-        intr.width, intr.height, intr.fx, intr.fy, intr.ppx, intr.ppy
-    )
 def cloud_resolution(pcd, k=8):
     pts = np.asarray(pcd.points)
     if len(pts) < 2:
@@ -265,106 +173,7 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
 
     return result.correspondence_set
 
-def find_best_template_teaser(dst_cloud, src_clouds, target_points=100):
-    dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 400)
-    if not dst_down.has_normals():
-        dst_down.estimate_normals()
-    res = cloud_resolution(dst_down)
-    noise_bound = 1.5 * res           # adaptive, often far better than a fixed 1mm
-    match_max_dist = 4.0 * res        # cap for geometric plausibility
 
-    best = dict(idx=-1, T=np.eye(4), score=np.inf)
-    
-    for idx, src_cloud in enumerate(src_clouds):
-        T0 = initial_align_centroid_pca(src_cloud, dst_cloud)
-        src0 = copy.deepcopy(src_cloud).transform(T0)
-
-        # 1) Downsample & FPFH *after* coarse alignment
-        src_down, src_fpfh = preprocess_point_cloud_uniform(src0, 400)
-        if src_down is None:
-            continue
-        if not src_down.has_normals():
-            src_down.estimate_normals()
-        correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=match_max_dist)
-        if len(correspondences) < 5:
-            print("Not enough correspondences")
-            continue
-        H = run_teaser(src_down, dst_down, correspondences, noise_bound_m=noise_bound)
-        icp_result = o3d.pipelines.registration.registration_icp(
-            src_down, dst_down, 0.01, H,
-            o3d.pipelines.registration.TransformationEstimationPointToPoint()
-        )
-        refined_transform = icp_result.transformation  # refined
-
-        T_full = refined_transform @ T0
-        src_aligned = copy.deepcopy(src_cloud).transform(T_full)
-        alpha = 1
-    
-
-        geom_err = chamfer_distance(src_aligned, dst_cloud)
-
-        # Combined score
-        score = alpha * geom_err
-
-        if score < best["score"]:
-            best.update(idx=idx, T=T_full, score=score)
-
-    return best["idx"], best["T"]
-
-def load_scene_camera(cam_json_path):
-    with open(cam_json_path, "r") as f: data = json.load(f)
-    # returns dict: frame_id -> (K (3x3), depth_scale, width, height)
-    cams = {}
-    for k, v in data.items():
-        Klist = v["cam_K"] if "cam_K" in v else v["K"]     # be tolerant
-        K = np.array(Klist, dtype=np.float32).reshape(3,3)
-        depth_scale = float(v.get("depth_scale", 0.1))
-        width  = int(v.get("width",  640))
-        height = int(v.get("height", 480))
-        cams[k] = (K, depth_scale, width, height)
-    return cams
-
-def list_bop_frames(seq_dir):
-    rgb_dir   = os.path.join(seq_dir, "rgb")
-    depth_dir = os.path.join(seq_dir, "depth")
-    rgb_files = sorted(glob.glob(os.path.join(rgb_dir, "*.jpg")))
-    # ids are filenames without extension (usually 000000, 000001, …)
-    frames = []
-    for rgb_path in rgb_files:
-        fid = os.path.splitext(os.path.basename(rgb_path))[0]
-        depth_path = os.path.join(depth_dir, f"{fid}.png")
-        if os.path.exists(depth_path):
-            frames.append((fid, rgb_path, depth_path))
-    return frames
-
-def load_camera_intrinsics(scene_camera_path, frame_id, image_width, image_height):
-    """
-    Returns Open3D PinholeCameraIntrinsic object from BlenderProc camera data.
-    """
-    if isinstance(frame_id, int):
-        frame_id = f"{frame_id}"
-
-    with open(scene_camera_path, "r") as f:
-        cam_data = json.load(f)
-
-    if frame_id not in cam_data:
-        raise ValueError(f"Frame ID {frame_id} not found in scene_camera.json")
-
-    cam_K = cam_data[frame_id]["cam_K"]
-    cam_K_np = np.array(cam_K).reshape(3,3)
-    fx, fy = cam_K[0], cam_K[4]
-    cx, cy = cam_K[2], cam_K[5]
-
-    depth_scale = cam_data[frame_id]["depth_scale"]
-    intrinsic = o3d.camera.PinholeCameraIntrinsic(
-        width=image_width,
-        height=image_height,
-        fx=fx,
-        fy=fy,
-        cx=cx,
-        cy=cy
-    )
-    return intrinsic, depth_scale,cam_K_np
 def camera_eye_lookat_up_from_H(H):
     """
     Convert model→camera H to eye/target/up in model/world coords.
@@ -389,45 +198,7 @@ def camera_eye_lookat_up_from_H(H):
     return eye, target, up
 
 
-def get_pointcloud(depth_raw, color_raw, scene_camera_parent, mask):    
-    
-    binary_mask = (mask == 255).astype(np.uint8)
-    mask_pixels = np.sum(binary_mask)
-    scene_camera_path = scene_camera_parent + "/scene_camera.json"
-    if mask_pixels == 0:
-        print("WARNING: No pixels selected by mask!")
-        return None
-    
-    #color_raw = cv2.cvtColor(color_raw, cv2.COLOR_BGR2RGB)
-    
-    h, w = depth_raw.shape
-    intrinsic, depth_scale, K = load_camera_intrinsics(scene_camera_path, 0, w, h)
-    depth_raw = depth_raw * depth_scale
-    
-    masked_depth = np.where(binary_mask, depth_raw, 0.0)
-    masked_color = np.where(binary_mask[:, :, None], color_raw, 0)
 
-    valid_depth_mask = (masked_depth > 0.01) & (masked_depth < 10.0)  
-    masked_depth = np.where(valid_depth_mask, masked_depth, 0.0)
-    masked_color = np.where(valid_depth_mask[:, :, None], masked_color, 0)
-    
-    depth_o3d = o3d.geometry.Image(masked_depth)
-    color_o3d = o3d.geometry.Image(masked_color)
-    
-    rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
-        color_o3d, depth_o3d,
-        depth_scale=1.0,
-        convert_rgb_to_intensity=False
-    )
-    
-    pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd_image, intrinsic)
-
-    
-    # Remove outliers
-    if len(pcd.points) > 0:
-        pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=0.9)
-    
-    return pcd, K, intrinsic
 
 def project_points(points_3d, K, T_m2c):
     """Project 3D points into image pixels."""
