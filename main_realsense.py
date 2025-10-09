@@ -43,7 +43,7 @@ def main():
 
     intr, K = rs_get_intrinsics(profile=profile) # get intrinsic info and intrinsic camera matrix
 
-    #Preload Templates for Template matching
+    #Preload Templates for Template matching and crete them if not already done
     ply_files = sorted(glob.glob(os.path.join(PCD_PATH, "*.ply")))
     if not ply_files:
         render_lego_views(mesh_path=CAD_PATH, output_dir=PCD_PATH)
@@ -64,8 +64,6 @@ def main():
     mesh.compute_vertex_normals()
 
     
- 
-    
     # Preload YOLO model once
     yolo_model = YOLO(WEIGHTS_PATH)
     
@@ -78,7 +76,6 @@ def main():
     scene = None
     render_w = render_h = None
   
-    
     try:
         while True:
             # Read Camera frames (color and depth) and align them
@@ -87,7 +84,8 @@ def main():
             color_frame = frameset.get_color_frame()
             if not depth_frame or not color_frame:
                 continue
-            #preprocess the images
+
+            #preprocess the images for better quality
             frame = depth_frame
             frame = spatial.process(frame)
             frame = temporal.process(frame)
@@ -110,8 +108,10 @@ def main():
                     frame = spatial.process(frame)
                     frame = temporal.process(frame)
                     frame = hole_fill.process(frame)
+
                     depth = np.asanyarray(frame.get_data())
                     color = np.asanyarray(color_frame.get_data())  
+
                     mask = detect_mask(yolo_model, color)
                     if mask is None or mask.sum() == 0:
                         frame_counter = 0
@@ -128,38 +128,21 @@ def main():
                 dst_cloud = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, o3d_intrinsics_from_rs(intr))
                 dst_cloud, _ = dst_cloud.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
                 # First guess with templates
-                best_idx, H_init = find_best_template_teaser(dst_cloud, src_clouds, target_points=TARGET_PTS)
+                _,  H_init = find_best_template_teaser(dst_cloud, src_clouds, target_points=TARGET_PTS)
+
+                initialized = True
+                T_m2c = H_init.copy()
+                # prepare renderer once we know dims
+                render_w, render_h = intr.width, intr.height
+                renderer = o3d.visualization.rendering.OffscreenRenderer(render_w, render_h)
+                scene = renderer.scene
+                scene.set_background([1, 1, 1, 1])
+                mat = o3d.visualization.rendering.MaterialRecord()
+                mat.shader = "defaultLit"
+                scene.add_geometry("mesh", mesh, mat)
+                continue
             
-                # Candidate CAD for tracking going forward
-                cand_cad = copy.deepcopy(src_clouds[best_idx])
-                cand_cad.transform(H_init)
 
-                # Show candidate guess
-                o3d.visualization.draw_geometries([
-                    cand_cad.paint_uniform_color([0, 1, 1]),
-                    dst_cloud.paint_uniform_color([0, 1, 0])
-                ], window_name="Init registration (ENTER=accept, SPACE=reject)")
-
-                print("[INFO] Press Y/y to accept this guess. Or something else to try again")
-
-                nb = input('Enter your input:')
-                if nb.lower() == 'y':  
-                    print("[INFO] Initial pose accepted.")
-                    initialized = True
-                    T_m2c = H_init.copy()
-                    # prepare renderer once we know dims
-                    render_w, render_h = intr.width, intr.height
-                    renderer = o3d.visualization.rendering.OffscreenRenderer(render_w, render_h)
-                    scene = renderer.scene
-                    scene.set_background([1, 1, 1, 1])
-                    mat = o3d.visualization.rendering.MaterialRecord()
-                    mat.shader = "defaultLit"
-                    scene.add_geometry("mesh", mesh, mat)
-                    continue
-                else:
-                    print("[INFO] Initial pose rejected. Retrying...")
-                    frame_counter = 0
-                    continue
             all = time.time()
             # Projection (intrinsics) for this frame
             start = time.time()
