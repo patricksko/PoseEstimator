@@ -1,9 +1,5 @@
-import os
-import glob
 import numpy as np   
 import cv2                     # fundamental package for scientific computing
-import matplotlib.pyplot as plt           # 2D plotting library producing publication quality figures
-import pyrealsense2 as rs 
 import open3d as o3d                # Intel RealSense cross-platform open-source API
 from EstimHelpers.HelpersRealtime import *
 from EstimHelpers.RealSenseClass import RealSenseCamera
@@ -12,7 +8,7 @@ from EstimHelpers.template_creation import render_lego_views
 from ultralytics import YOLO
 import time
 from colorama import Fore, Style
-from dataclasses import dataclass
+
 
 WEIGHTS_PATH="./data/best.pt"
 PCD_PATH = "./data/lego_views/"
@@ -28,11 +24,10 @@ def timer_print(start_time, label):
     return elapsed
 
 def main():
-    # Setup:
-    # Check if realsense is connected
-    cam = RealSenseCamera()
+    cam = RealSenseCamera() # call the constructor of RealSenseCamera
     intr, K = cam.rs_get_intrinsics()
-    estimator = PoseEstimator(WEIGHTS_PATH, CAD_PATH, PCD_PATH, intr, K, TARGET_PTS)
+
+    estimator = PoseEstimator(WEIGHTS_PATH, CAD_PATH, PCD_PATH, intr, K, TARGET_PTS) # call the constructor of PoseEstimator for 6d-Pose
 
     # Read CAD Model for comparision
     cad_model = o3d.io.read_point_cloud(CAD_PATH)
@@ -41,17 +36,17 @@ def main():
     frame_counter = 0
     frame_id = 0
     initialized = False # Variable for initial orientation
+    errorcounter = 0
   
     try:
         while True:
-            color = cam.get_rgbd()
+            color = cam.get_rgbd() #get color frame
 
             #First initialization of pose
             if not initialized:
-                # Check if mask is available, and if its not a misdetection (should appear in at least 10 frames)
+                # Check if mask is available, and if its not a misdetection
                 while frame_counter!=10:
                     color = cam.get_rgbd()
-
                     mask = estimator.detect_mask(color)
                     if mask is None or mask.sum() == 0:
                         frame_counter = 0
@@ -61,13 +56,12 @@ def main():
                
                 # First guess with templates
                 H_init = estimator.find_best_template_teaser(dst_cloud)
-                H_init = enforce_upright_pose_y_up(H_init)
+                # H_init = enforce_upright_pose_y_up(H_init)
 
                 initialized = True
                 T_m2c = H_init.copy()
-                # prepare renderer once we know dims
-                
                 continue
+
             all = time.time()
             # Projection (intrinsics) for this frame
             start = time.time()
@@ -82,7 +76,16 @@ def main():
                 mask = estimator.detect_mask(color)
                 if mask is None or mask.sum() == 0:   # no segmentation found
                     print("No mask detected")
+                    errorcounter += 1
+                    if errorcounter > 20:
+                        initialized = False
+                        frame_counter = 0
+                        continue
                     continue
+                else:
+                    errorcounter = 0
+                
+                
                 dst_cloud = cam.get_pcd_from_rgbd(mask)
              
                 timer_print(start, "RGB Kamera")
