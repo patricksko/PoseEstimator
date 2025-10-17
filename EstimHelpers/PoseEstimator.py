@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import open3d as o3d
 
+
 class PoseEstimator:
     def __init__(self, yolo_weights, cad_path, pcd_path, intr, K, target_points=100):
         self.yolo = YOLO(yolo_weights)
@@ -41,11 +42,9 @@ class PoseEstimator:
         
     def detect_mask(self, img_bgr, class_id=0, conf=0.8, imgsz=512):
         h, w = img_bgr.shape[:2]
-        mask = np.zeros((h, w), dtype=np.uint8)
+        masks = []
         results = self.yolo(source=img_bgr, imgsz=imgsz, conf=conf, device="0", save=False, verbose=False)
-        # if results[0].boxes is None or len(results[0].boxes) == 0:
-        #     print("No bounding boxes detected. Exiting...")
-        #     exit()  # or return if inside a function
+
         for r in results:
             if not hasattr(r, "masks") or r.masks is None:
                 continue
@@ -54,9 +53,10 @@ class PoseEstimator:
                 if int(cls) != class_id: 
                     continue
                 poly = np.array(seg, dtype=np.int32)
+                mask = np.zeros((h, w), dtype=np.uint8)
                 cv2.fillPoly(mask, [poly], 255)
-                return mask    # first match
-        return mask
+                masks.append(mask)
+        return masks
     
     def find_best_template_teaser(self, dst_cloud):
         dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, 400)

@@ -41,19 +41,18 @@ def main():
     try:
         while True:
             color = cam.get_rgbd() #get color frame
-            print("hia")
+            
             #First initialization of pose
             if not initialized:
                 # Check if mask is available, and if its not a misdetection
                 while frame_counter!=10:
                     color = cam.get_rgbd()
-                    mask = estimator.detect_mask(color)
-                    if mask is None or mask.sum() == 0:
+                    masks = estimator.detect_mask(color)
+                    if len(masks) == 0:
                         frame_counter = 0
                     frame_counter+=1
+                dst_clouds = cam.get_pcd_from_rgbd(masks)
                 
-                dst_cloud = cam.get_pcd_from_rgbd(mask)
-               
                 # First guess with templates
                 H_init = estimator.find_best_template_teaser(dst_cloud)
                 # H_init = enforce_upright_pose_y_up(H_init)
@@ -80,9 +79,27 @@ def main():
                     if errorcounter > 20:
                         initialized = False
                         frame_counter = 0
+                        errorcounter = 0
                         continue
                     continue
                 else:
+                    # if errorcounter > 5:
+                    #     dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, TARGET_PTS, True)
+                    #     src_down, src_fpfh = preprocess_point_cloud_uniform(src, TARGET_PTS, True)
+
+                    #     res = cloud_resolution(dst_down)
+                    #     match_max_dist = 4.0 * res  
+                    #     noise_bound = 1.5 * res        
+                    #     correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=match_max_dist)
+                    #     H = run_teaser(src_down, dst_down, correspondences, noise_bound_m=noise_bound)
+                    #     icp_result = o3d.pipelines.registration.registration_icp(
+                    #         src_down, dst_down, 0.01, H,
+                    #         o3d.pipelines.registration.TransformationEstimationPointToPoint()
+                    #     )
+                    #     delta = icp_result.transformation
+                    #     T_m2c = delta @T_m2c
+                    #     errorcounter = 0
+                    #     continue
                     errorcounter = 0
                 
                 

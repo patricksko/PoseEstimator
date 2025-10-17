@@ -2,6 +2,7 @@ import pyrealsense2 as rs
 import numpy as np
 import cv2
 import open3d as o3d
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class RealSenseCamera:
     def __init__(self, width=640, height=480, fps=30):
@@ -53,7 +54,9 @@ class RealSenseCamera:
     def stop(self):
         self.pipe.stop()
 
+    
     def get_pcd_from_rgbd(self, mask):
+        
         depth_m = self.depth.astype(np.float32) * self.depth_scale # mind depth scale of realsense
         depth_m[mask == 0] = 0.0 # create a mask of the depth image for pointcloud
 
@@ -67,3 +70,65 @@ class RealSenseCamera:
     ))
         dst_cloud, _ = dst_cloud.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
         return dst_cloud
+    
+    # def get_pcd_from_rgbd(self, masks):
+    #     if isinstance(masks, list):
+    #         masks = np.stack(masks, axis = 0)
+
+    #     base_depth = self.depth.astype(np.float32) * self.depth_scale # mind depth scale of realsense
+
+    #     color_o3d = o3d.geometry.Image(cv2.cvtColor(self.color, cv2.COLOR_BGR2RGB)) # create open3d color image for later processing
+    #     intrinsic = o3d.camera.PinholeCameraIntrinsic(
+    #         self.intr.width,
+    #         self.intr.height,
+    #         self.intr.fx,
+    #         self.intr.fy,
+    #         self.intr.ppx,
+    #         self.intr.ppy
+    #     )
+    #     dst_clouds = []
+    #     for mask in masks:
+    #         depth_m = np.where(mask > 0, base_depth, 0.0)
+    #         depth_o3d = o3d.geometry.Image(depth_m)
+    #         rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+    #             color_o3d, depth_o3d, depth_scale=1.0, convert_rgb_to_intensity=False
+    #         )
+    #         pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic)
+    #         pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
+    #         dst_clouds.append(pcd)
+    #     return dst_clouds
+    # def get_pcd_from_rgbd_mf(self, masks):
+    #     if isinstance(masks, list):
+    #         masks = np.stack(masks, axis = 0)
+
+    #     color_rgb = cv2.cvtColor(self.color, cv2.COLOR_BGR2RGB)
+    #     base_depth = self.depth.astype(np.float32) * self.depth_scale
+
+    #     color_o3d = o3d.geometry.Image(cv2.cvtColor(self.color, cv2.COLOR_BGR2RGB)) # create open3d color image for later processing
+    #     intrinsic = o3d.camera.PinholeCameraIntrinsic(
+    #         self.intr.width,
+    #         self.intr.height,
+    #         self.intr.fx,
+    #         self.intr.fy,
+    #         self.intr.ppx,
+    #         self.intr.ppy
+    #     )
+    #     def process_mask(mask):
+    #         """Process a single mask → point cloud."""
+    #         depth_m = np.where(mask > 0, base_depth, 0.0)
+    #         depth_o3d = o3d.geometry.Image(depth_m)
+    #         color_o3d = o3d.geometry.Image(color_rgb)
+    #         rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+    #             color_o3d, depth_o3d, depth_scale=1.0, convert_rgb_to_intensity=False
+    #         )
+    #         pcd = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, intrinsic)
+    #         pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
+    #         return pcd
+
+    #     dst_clouds = []
+    #     with ThreadPoolExecutor(max_workers=8) as executor:
+    #         futures = [executor.submit(process_mask, m) for m in masks]
+    #         for f in as_completed(futures):
+    #             dst_clouds.append(f.result())
+
+    #     return dst_clouds
