@@ -41,7 +41,7 @@ def main():
     try:
         while True:
             color = cam.get_rgbd() #get color frame
-
+            print("hia")
             #First initialization of pose
             if not initialized:
                 # Check if mask is available, and if its not a misdetection
