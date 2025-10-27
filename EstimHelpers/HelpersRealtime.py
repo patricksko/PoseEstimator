@@ -1,15 +1,8 @@
 import numpy as np
-import cv2
 import open3d as o3d
-import pyrealsense2 as rs
 from teaserpp_python import _teaserpp as tpp
-import copy
-import json
-import os
-import glob
-import time
-import pyrealsense2 as rs 
-from dataclasses import dataclass
+import tempfile, os
+import subprocess
 
 
 def enforce_upright_pose_y_up(T):
@@ -97,6 +90,7 @@ def preprocess_point_cloud_uniform(pcd, target_points=500, calc_fpfh=True):
             pcd_down,
             o3d.geometry.KDTreeSearchParamHybrid(radius=radius*2.5, max_nn=100)
         )
+      
     else:
         fpfh = None
     
@@ -213,3 +207,5 @@ def project_points(points_3d, K, T_m2c):
     uv = (K @ (pts_cam.T)).T  # Nx3
     uv = uv[:, :2] / uv[:, 2:3]
     return uv.astype(int)
+
+
