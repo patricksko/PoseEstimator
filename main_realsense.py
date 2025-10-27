@@ -51,7 +51,7 @@ def main():
                     if len(masks) == 0:
                         frame_counter = 0
                     frame_counter+=1
-                dst_clouds = cam.get_pcd_from_rgbd(masks)
+                dst_cloud = cam.get_pcd_from_rgbd(masks)
                 
                 # First guess with templates
                 H_init = estimator.find_best_template_teaser(dst_cloud)
