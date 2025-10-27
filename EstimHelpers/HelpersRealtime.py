@@ -1,8 +1,7 @@
 import numpy as np
 import open3d as o3d
 from teaserpp_python import _teaserpp as tpp
-import tempfile, os
-import subprocess
+import cv2
 
 
 def enforce_upright_pose_y_up(T):
@@ -209,3 +208,34 @@ def project_points(points_3d, K, T_m2c):
     return uv.astype(int)
 
 
+def draw_model_projection_with_axes(color, cad_points, K, T_m2c, axis_length=0.05):
+    """
+    Projects the CAD model points and its coordinate frame onto the color image.
+
+    Args:
+        color (np.ndarray): BGR color image to draw on.
+        cad_points (np.ndarray): Nx3 CAD model points.
+        K (np.ndarray): 3x3 camera intrinsic matrix.
+        T_m2c (np.ndarray): 4x4 transformation (model → camera).
+        axis_length (float, optional): Length of each coordinate axis in meters.
+    """
+    # ---- Project CAD points ----
+    uv = project_points(cad_points, K, T_m2c)
+    for (u, v) in uv:
+        if 0 <= u < color.shape[1] and 0 <= v < color.shape[0]:
+            cv2.circle(color, (u, v), 1, (0, 0, 255), -1)  # red points
+
+    # ---- Draw coordinate frame ----
+    origin = np.array([[0, 0, 0]])
+    x_axis = np.array([[axis_length, 0, 0]])
+    y_axis = np.array([[0, axis_length, 0]])
+    z_axis = np.array([[0, 0, axis_length]])
+
+    axes_pts = np.vstack([origin, x_axis, y_axis, z_axis])
+    axes_uv = project_points(axes_pts, K, T_m2c)
+    o = tuple(axes_uv[0])
+
+    # Draw X (red), Y (green), Z (blue)
+    cv2.line(color, o, tuple(axes_uv[1]), (0, 0, 255), 2)  # X-axis
+    cv2.line(color, o, tuple(axes_uv[2]), (0, 255, 0), 2)  # Y-axis
+    cv2.line(color, o, tuple(axes_uv[3]), (255, 0, 0), 2)  # Z-axis

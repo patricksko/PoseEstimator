@@ -105,10 +105,8 @@ def main():
                 timer_print(all, "Full Time")
 
                
-            uv = project_points(cad_points, K, T_m2c)
-            for (u, v) in uv:
-                if 0 <= u < color.shape[1] and 0 <= v < color.shape[0]:
-                    cv2.circle(color, (u, v), 1, (0, 0, 255), -1)  # red dots
+            # uv = project_points(cad_points, K, T_m2c)
+            draw_model_projection_with_axes(color, cad_points, K, T_m2c)
 
             cv2.imshow("Live Tracking", color)
             if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
