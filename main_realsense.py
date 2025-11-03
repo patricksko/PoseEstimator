@@ -26,7 +26,7 @@ def timer_print(start_time, label):
 def main():
     cam = RealSenseCamera() # call the constructor of RealSenseCamera
     intr, K = cam.rs_get_intrinsics()
-
+    
     estimator = PoseEstimator(WEIGHTS_PATH, CAD_PATH, PCD_PATH, intr, K, TARGET_PTS) # call the constructor of PoseEstimator for 6d-Pose
 
     # Read CAD Model for comparision

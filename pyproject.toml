@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+dynamic = ["version"]
+name = "PoseEstimator"
+
+dependencies = [
+  "blenderproc==2.8.0",
+  "colorama==0.4.6",
+  "debugpy==1.8.16",
+  "eigen==3.4.0",
+  "
+]
+
