@@ -10,7 +10,8 @@ output/
 debug/
 datageneration/Blenderproc/resources/*
 datageneration/Blenderproc/output/*
-detection/YOLO/output_runs/*
+src/pose_estimator/detection/YOLO/output_runs/*
+
 *.blend1
 .vscode
 *.pyc
@@ -26,10 +27,10 @@ docs/source/images/
 docs/source/examples/
 docs/source/*md
 blenderproc_resources/
-EstimHelpers.egg-info/
-registration/my_examples/lego_views/*
-registration/my_examples/projection_templates/*
-registration/my_examples/__pycache__/*
+src/PoseEstimator.egg-info/
+src/pose_estimator/registration/my_examples/lego_views/*
+src/pose_estimator/registration/my_examples/projection_templates/*
+src/pose_estimator/registration/my_examples/__pycache__/*
 data/*
 registration/ws/LegoBlock_variant.ply
 

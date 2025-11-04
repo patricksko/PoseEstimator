@@ -72,3 +72,6 @@ dependencies = [
 Homepage = "https://www.acin.tuwien.ac.at/"
 Repository = "https://github.com/patricksko/PoseEstimator"
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
