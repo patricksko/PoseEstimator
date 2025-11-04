@@ -27,33 +27,13 @@ conda activate pose_estimator_env
 ```
 
 ## 2. Install dependencies
-You can install the required Python packages in two ways
-### Option A - Using ```requirements.txt```
+You can install the required Python packages using the provided pyproject.toml file (PEP 621 standard)
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
-### Option B - Using ```conda_env.yaml```
-This will reproduce the environment exactly as specified:
+After installing the required packages you can run the main code by running:
 ```bash
-conda env create -f conda_env.yaml
-conda activate pose_estimator_env
-```
-If you already created the environment manually in Step 1 and just want to update it with the ```conda_env.yaml``` file:
-```bash
-conda env update -n pose_estimator_env -f conda_env.yaml --prune
-```
-## Notes
-Use **Option A** if you just want to install Python Packages quickly.
-Use **Option B** if you want reproducibility across machines.
-
-
-
-```bash
-conda env create -f conda_env.yaml
-```
-2. Install the required Python packages from requirements.txt:
- ```
-pip install -r requirements.txt
+python -m pose_estomator.main_realsense
 ```
 # Usage
 For detailed instructions on each component, please refer to the README files located within their respective subfolders.
