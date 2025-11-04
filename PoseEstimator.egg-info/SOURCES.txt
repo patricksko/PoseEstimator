@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+setup.py
+PoseEstimator.egg-info/PKG-INFO
+PoseEstimator.egg-info/SOURCES.txt
+PoseEstimator.egg-info/dependency_links.txt
+PoseEstimator.egg-info/requires.txt
+PoseEstimator.egg-info/top_level.txt

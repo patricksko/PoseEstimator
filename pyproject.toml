@@ -1,16 +1,74 @@
 [build-system]
-requires = ["setuptools >= 77.0.3"]
+requires = ["setuptools >= 77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 dynamic = ["version"]
 name = "PoseEstimator"
+description = "Synthetic dataset generation, object detection, and registration pipeline using BlenderProc, Ultralytics, and TEASER++."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+authors = [
+    { name = "Patrick Skoumal", email = "patrick.skoumal@tuwien.ac.at" },
+]
+maintainers = [
+  {name = "Patrick Skoumal", email = "patrick.skoumal@tuwien.ac.at"}
+]
+requires-python = ">=3.10"
+
+keywords = [
+    "Synthetic data",
+    "BlenderProc",
+    "Ultralytics",
+    "Object detection",
+    "3D registration",
+    "TEASER++",
+    "Open3D",
+    "Point cloud",
+]
+
+classifiers = [
+  # How mature is this project? Common values are
+  #   3 - Alpha
+  #   4 - Beta
+  #   5 - Production/Stable
+  "Development Status :: 3 - Alpha",
+
+  # Indicate who your project is intended for
+  "Intended Audience :: Developers",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+
+  # Specify the Python versions you support here.
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+]
 
 dependencies = [
   "blenderproc==2.8.0",
+  "open3d==0.19.0",
+  "pyrender==0.1.45",
+  "trimesh==4.7.1",
+  "matplotlib==3.10.5",
+  "pyrealsense2==2.56.5.9235",
+
+  # --- Object Detection / Deep Learning ---
+  "ultralytics==8.3.176",
+
+  # --- Registration / Geometry / Math ---
+  "numpy==2.2.6",
+
+  # --- Utility / Visualization ---
+  "opencv-python==4.12.0.88",
   "colorama==0.4.6",
-  "debugpy==1.8.16",
-  "eigen==3.4.0",
-  "
+  
+  # --- General Utilities ---
+  "pyyaml==6.0.2",
+  "requests==2.32.4",
+  "tqdm==4.67.1",
 ]
+
+[project.urls]
+Homepage = "https://www.acin.tuwien.ac.at/"
+Repository = "https://github.com/patricksko/PoseEstimator"
 
