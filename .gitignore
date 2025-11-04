@@ -27,7 +27,7 @@ docs/source/images/
 docs/source/examples/
 docs/source/*md
 blenderproc_resources/
-src/PoseEstimator.egg-info/
+src/PoseEstimator.egg-info/*
 src/pose_estimator/registration/my_examples/lego_views/*
 src/pose_estimator/registration/my_examples/projection_templates/*
 src/pose_estimator/registration/my_examples/__pycache__/*
