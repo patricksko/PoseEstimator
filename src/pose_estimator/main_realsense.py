@@ -30,8 +30,16 @@ def main():
     estimator = PoseEstimator(WEIGHTS_PATH, CAD_PATH, PCD_PATH, intr, K, TARGET_PTS) # call the constructor of PoseEstimator for 6d-Pose
 
     # Read CAD Model for comparision
-    cad_model = o3d.io.read_point_cloud(CAD_PATH)
-    cad_points = np.asarray(cad_model.points)
+    mesh = o3d.io.read_triangle_mesh(CAD_PATH)
+    mesh.compute_vertex_normals()
+
+    # Sample more points (e.g. 50,000 points)
+    pcd = mesh.sample_points_uniformly(number_of_points=200)
+
+    # or use Poisson disk sampling (more even distribution)
+    # pcd = mesh.sample_points_poisson_disk(number_of_points=50000)
+
+    cad_points = np.asarray(pcd.points)
     
     frame_counter = 0
     frame_id = 0
@@ -56,7 +64,7 @@ def main():
                
                 # First guess with templates
                 H_init = estimator.find_best_template_teaser(dst_cloud)
-                # H_init = enforce_upright_pose_y_up(H_init)
+                H_init = enforce_upright_pose_y_up(H_init)
 
                 initialized = True
                 T_m2c = H_init.copy()
@@ -106,8 +114,8 @@ def main():
 
                
             # uv = project_points(cad_points, K, T_m2c)
+            
             draw_model_projection_with_axes(color, cad_points, K, T_m2c)
-
             cv2.imshow("Live Tracking", color)
             if cv2.waitKey(1) & 0xFF == 27:  # ESC to quit
                 break

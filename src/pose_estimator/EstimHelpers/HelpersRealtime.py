@@ -6,42 +6,42 @@ import cv2
 
 def enforce_upright_pose_y_up(T):
     """
-    Align model's local +Y (stud direction) with world +Y (up).
-    Handles arbitrary tilt (not just upside-down).
+    Align model's local +Y axis with world -Y (up direction).
+    Allows up to ±10° tolerance; otherwise rotates 90° around X repeatedly.
     """
     T = np.array(T, copy=True)
     R = T[:3, :3]
 
-    # current up vector in world coords
-    up_local = R[:, 1]
-    world_up = np.array([0, 1, 0], dtype=np.float64)
+    world_up = np.array([0, -1, 0], dtype=np.float64)
+    cos_tolerance = np.cos(np.deg2rad(30))  # ≈ 0.9848
 
-    # if already mostly aligned, skip
-    cos_angle = np.dot(up_local, world_up) / (np.linalg.norm(up_local) + 1e-8)
-    if abs(cos_angle) > 0.999:
-        return T  # already upright
+    for _ in range(4):
+        print("="*20)
+        print("\n")
+        print(R)
+        print("="*20)
+        print("\n")
+        up_local = R[:, 1]
+        cos_angle = np.dot(up_local, world_up)/(np.linalg.norm(up_local)*np.linalg.norm(world_up))
+        print(cos_angle)
+        if cos_angle >= cos_tolerance:
+            print("="*20)
+            print("\n")
+            print("Gewählt:")
+            T[:3, :3] = R
+            print(R)
+            return T
 
-    # rotation axis = cross product between current up and desired up
-    axis = np.cross(up_local, world_up)
-    axis_norm = np.linalg.norm(axis)
-    if axis_norm < 1e-8:
-        # up_local is opposite to world_up → rotate 180° around X
-        axis = np.array([1, 0, 0])
-        angle = np.pi
-    else:
-        axis = axis / axis_norm
-        angle = np.arccos(np.clip(cos_angle, -1.0, 1.0))
+        # Rotate 90° about X
+        Rz = np.array([[0, -1, 0],
+                       [1, 0, 0],
+                       [0, 0, 1]], dtype=np.float64)
+        R = R @ Rz
 
-    # Rodrigues' rotation formula to get correction rotation
-    K = np.array([[0, -axis[2], axis[1]],
-                  [axis[2], 0, -axis[0]],
-                  [-axis[1], axis[0], 0]])
-    R_correction = np.eye(3) + np.sin(angle)*K + (1 - np.cos(angle))*(K @ K)
-
-    # Apply correction
-    R_fixed = R_correction @ R
-    T[:3, :3] = R_fixed
+    T[:3, :3] = R
     return T
+
+
 
 def uniform_downsample_farthest_point(pcd, target_points=500):
     """
