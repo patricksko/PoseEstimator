@@ -16,7 +16,7 @@ This project aims to build a complete pipeline for 6D object pose estimation by 
 This end-to-end pipeline leverages synthetic data and state-of-the-art methods to achieve accurate 6D pose estimation.
 
 # Install
-We recommend using **Conda** to create an isolated environment.
+We recommend using **Conda** or **.venv** to create an isolated environment.
 
 ## 1. Create and activate a new Conda environment (Python 3.10)
 
@@ -25,9 +25,19 @@ We recommend using **Conda** to create an isolated environment.
 conda create -n pose_estimator_env python=3.10 -y
 conda activate pose_estimator_env
 ```
+## or a new Virtual Environment 
+### Linux / macOS / Windows
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
 ## 2. Install dependencies
 You can install the required Python packages using the provided pyproject.toml file (PEP 621 standard)
+```bash
+pip install -e .
+```
+You also have to append the TEASER++ dependency. Therefore you have to change to the TEASER++ submodule and run
 ```bash
 pip install -e .
 ```
