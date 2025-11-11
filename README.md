@@ -25,7 +25,7 @@ We recommend using **Conda** or **.venv** to create an isolated environment.
 conda create -n pose_estimator_env python=3.10 -y
 conda activate pose_estimator_env
 ```
-## or a new Virtual Environment 
+or a new Virtual Environment 
 ### Linux / macOS / Windows
 ```bash
 python -m venv .venv
