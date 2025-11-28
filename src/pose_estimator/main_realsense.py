@@ -4,6 +4,7 @@ import open3d as o3d                # Intel RealSense cross-platform open-source
 from pose_estimator.EstimHelpers.HelpersRealtime import *
 from pose_estimator.EstimHelpers.RealSenseClass import RealSenseCamera
 from pose_estimator.EstimHelpers.PoseEstimator import PoseEstimator
+from pose_estimator.EstimHelpers.Detector import Detector
 from pose_estimator.EstimHelpers.template_creation import render_lego_views
 from ultralytics import YOLO
 import time
@@ -27,8 +28,8 @@ def main():
     cam = RealSenseCamera() # call the constructor of RealSenseCamera
     intr, K = cam.rs_get_intrinsics()
     
-    estimator = PoseEstimator(WEIGHTS_PATH, CAD_PATH, PCD_PATH, intr, K, TARGET_PTS) # call the constructor of PoseEstimator for 6d-Pose
-
+    estimator = PoseEstimator(CAD_PATH, PCD_PATH, intr, K, TARGET_PTS) # call the constructor of PoseEstimator for 6d-Pose
+    detector = Detector(WEIGHTS_PATH)
     # Read CAD Model for comparision
     mesh = o3d.io.read_triangle_mesh(CAD_PATH)
     mesh.compute_vertex_normals()
@@ -55,7 +56,11 @@ def main():
                 # Check if mask is available, and if its not a misdetection
                 while frame_counter!=10:
                     color = cam.get_rgbd()
-                    mask = estimator.detect_mask(color)
+                    detections = detector.detect_mask(color)
+                    print(detections)
+                    if len(detections) == 0:
+                        continue
+                    mask = detections[0]["mask"]
                     if mask is None or mask.sum() == 0:
                         frame_counter = 0
                     frame_counter+=1
@@ -68,29 +73,32 @@ def main():
 
                 initialized = True
                 T_m2c = H_init.copy()
+                
                 continue
 
             all = time.time()
             # Projection (intrinsics) for this frame
             start = time.time()
-            src = estimator.create_template_from_H(T_m2c=T_m2c)
+            prev_down = estimator.create_template_from_H(T_m2c=T_m2c, target_points=TARGET_PTS)
             timer_print(start, "Rendering")
 
             start = time.time()
-            prev_down, _ = preprocess_point_cloud_uniform(src, TARGET_PTS, False)
+            # prev_down, _ = preprocess_point_cloud_uniform(src, TARGET_PTS, False)
             timer_print(start, "Preprocessing Previous")
             frame_id += 1
             if frame_id % TRACK_EVERY == 0:
-                mask = estimator.detect_mask(color)
-                if mask is None or mask.sum() == 0:   # no segmentation found
+                detections = detector.detect_mask(color)
+                
+                if len(detections) == 0:   # no segmentation found
                     print("No mask detected")
                     errorcounter += 1
-                    if errorcounter > 20:
+                    if errorcounter > 5:
                         initialized = False
                         frame_counter = 0
                         continue
                     continue
                 else:
+                    mask = detections[0]["mask"]
                     errorcounter = 0
                 
                 

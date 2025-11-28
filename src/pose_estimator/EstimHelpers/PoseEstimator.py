@@ -1,16 +1,15 @@
 import os
 import glob
-from ultralytics import YOLO
 import pyrealsense2 as rs
 from pose_estimator.EstimHelpers.template_creation import render_lego_views
 from pose_estimator.EstimHelpers.HelpersRealtime import preprocess_point_cloud_uniform, cloud_resolution, get_correspondences, run_teaser, chamfer_distance, camera_eye_lookat_up_from_H, uniform_downsample_farthest_point
 import copy
 import numpy as np
-import cv2
 import open3d as o3d
 
-class PoseEstimator:
-    def __init__(self, yolo_weights: str, cad_path: str, pcd_path: str, intr: rs.intrinsics, K: np.ndarray, target_points: int =200):
+
+class PoseEstimator():
+    def __init__(self, cad_path: str, pcd_path: str, intr: rs.intrinsics, K: np.ndarray, target_points: int =200):
         """
         Initialize the 3D detection and registration pipeline.
 
@@ -23,7 +22,9 @@ class PoseEstimator:
             target_points (int, optional): Target number of downsampled points for feature computation.
                 Defaults to 100.
         """
-        self.yolo = YOLO(yolo_weights)
+        
+        if intr is None or K is None:
+            return
 
         self.mesh = o3d.io.read_triangle_mesh(cad_path)
         self.mesh.compute_vertex_normals()
@@ -94,46 +95,7 @@ class PoseEstimator:
 
             print(f"Loaded: {ply_file} with {len(src.points)} points")
         return src_clouds, fpfh_fts
-        
-    def detect_mask(self, img_bgr, class_id=0, conf=0.8):
-        """
-        Detects and extracts the segmentation mask of target objects in an RGB image
-        using the YOLO segmentation model.
-
-        The method runs the YOLO model on the input image, filters detections by the
-        specified `class_id` and confidence threshold, and converts the corresponding
-        segmentation polygon into a binary mask image. The mask highlights pixels
-        belonging to the detected object class.
-
-        Args:
-            img_bgr (np.ndarray): Input RGB image in BGR format, shape (H, W, 3).
-            class_id (int, optional): The target YOLO class ID to detect (e.g., 0 for 'object A'). 
-                Defaults to 0.
-            conf (float, optional): Minimum confidence threshold for YOLO detections to be accepted. 
-                Defaults to 0.8.
-
-        Returns:
-            np.ndarray:
-                A 2D binary mask (uint8) of shape (H, W) where:
-                - Pixel value 255 indicates object presence.
-                - Pixel value 0 indicates background.
-                If no object of the given class is found, an all-zero mask is returned.
-        """
-        h, w = img_bgr.shape[:2]
-        mask = np.zeros((h, w), dtype=np.uint8)
-        results = self.yolo(source=img_bgr, conf=conf, device="0", save=False, verbose=False)
-
-        for r in results:
-            if not hasattr(r, "masks") or r.masks is None:
-                continue
-            for seg, cls in zip(r.masks.xy, r.boxes.cls):
-                
-                if int(cls) != class_id: 
-                    continue
-                poly = np.array(seg, dtype=np.int32)
-                cv2.fillPoly(mask, [poly], 255)
-                return mask    # first match
-        return mask
+    
     
     def find_best_template_teaser(self, dst_cloud):
         dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, self.target_points)
@@ -176,7 +138,7 @@ class PoseEstimator:
 
         return best["T"]
     
-    def create_template_from_H(self, T_m2c):
+    def create_template_from_H(self, T_m2c, target_points):
         near, far = 0.01, 5.0
         self.scene.camera.set_projection(self.K, near, far, self.intr.width, self.intr.height)
 
@@ -192,6 +154,11 @@ class PoseEstimator:
             color_img, depth_img, depth_scale=1.0, depth_trunc=far, convert_rgb_to_intensity=False
         )
         src = o3d.geometry.PointCloud.create_from_rgbd_image(rgbd, o3d.camera.PinholeCameraIntrinsic(
-        self.intr.width, self.intr.height, self.intr.fx, self.intr.fy, self.intr.ppx, self.intr.ppy
-    ))
+            self.intr.width, self.intr.height, self.intr.fx, self.intr.fy, self.intr.ppx, self.intr.ppy
+        ))
+        pts = np.asarray(src.points)
+        if pts.shape[0] > target_points:
+            idx = np.random.choice(pts.shape[0], target_points, replace=False)
+            src = src.select_by_index(idx)
+
         return src

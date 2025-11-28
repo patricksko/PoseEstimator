@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools >= 77.0.3", "wheel"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-dynamic = ["version"]
 name = "PoseEstimator"
+version = "0.0.1"
 description = "Synthetic dataset generation, object detection, and registration pipeline using BlenderProc, Ultralytics, and TEASER++."
 readme = "README.md"
 license = "GPL-3.0-or-later"
