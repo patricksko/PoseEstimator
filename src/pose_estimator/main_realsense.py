@@ -116,7 +116,7 @@ def main():
                 timer_print(start, "ICP")
                 delta = icp_result.transformation  # refined
                 T_m2c = delta @ T_m2c              # candidate new pose
-
+                print(T_m2c)
                 print("="*50)
                 timer_print(all, "Full Time")
 

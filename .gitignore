@@ -28,9 +28,7 @@ docs/source/examples/
 docs/source/*md
 blenderproc_resources/
 src/PoseEstimator.egg-info/*
-registration/my_examples/lego_views/*
-registration/my_examples/projection_templates/*
-registration/my_examples/__pycache__/*
+registration/TEASER-plusplus/*
 data/*
 registration/ws/LegoBlock_variant.ply
 
