@@ -28,7 +28,7 @@ docs/source/examples/
 docs/source/*md
 blenderproc_resources/
 src/PoseEstimator.egg-info/*
-registration/TEASER-plusplus/*
+registration/*
 data/*
 registration/ws/LegoBlock_variant.ply
 
