@@ -56,10 +56,10 @@ dependencies = [
   "ultralytics",#==8.3.176",
 
   # --- Registration / Geometry / Math ---
-  "numpy",#==2.2.6",
+  #"numpy",#==2.2.6",
 
   # --- Utility / Visualization ---
-  "opencv-python",#==4.12.0.88",
+  #"opencv-python",#==4.12.0.88",
   "colorama",#==0.4.6",
   
   # --- General Utilities ---
