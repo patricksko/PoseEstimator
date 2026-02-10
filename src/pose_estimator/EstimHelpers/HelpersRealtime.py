@@ -1,7 +1,8 @@
 import numpy as np
 import open3d as o3d
-from teaserpp_python import _teaserpp as tpp
+import teaserpp_python #import _teaserpp as tpp
 import cv2
+from scipy.spatial import cKDTree
 
 
 def enforce_upright_pose_y_up(T):
@@ -55,7 +56,7 @@ def uniform_downsample_farthest_point(pcd, target_points=500):
 
 
 # Modified preprocessing function
-def preprocess_point_cloud_uniform(pcd, target_points=500, calc_fpfh=True):
+def preprocess_point_cloud_uniform(pcd, target_points=500, calc_fpfh=False):
     """
     Preprocess point cloud with uniform downsampling to exactly target_points.
     
@@ -92,43 +93,87 @@ def preprocess_point_cloud_uniform(pcd, target_points=500, calc_fpfh=True):
       
     else:
         fpfh = None
-    
+
 
     return pcd_down, fpfh
 
+def nn_residuals(src_aligned, dst_cloud):
+    src_pts = np.asarray(src_aligned.points)
+    dst_pts = np.asarray(dst_cloud.points)
+    tree = cKDTree(dst_pts)
+    dists, _ = tree.query(src_pts, k=1, workers=-1)
+    print("hahahahahahhahahahaha")
+    return dists
 
-def run_teaser(source, target, correspondences, noise_bound_m=0.001):
-    if len(correspondences) < 3:
-        return np.eye(4), [], [], []
+def voxel_coverage(points, voxel_size):
+    voxels = np.floor(points / voxel_size).astype(np.int32)
+    return len(np.unique(voxels, axis=0))
+
+def alignment_score(src_aligned, src_down, dst_down, voxel_size):
+    dists = nn_residuals(src_aligned, dst_down)
+    if dists is None:
+        return np.inf
+
+    med = np.median(dists)
+    p90 = np.percentile(dists, 90)
+
+    cov_aligned = voxel_coverage(
+        np.asarray(src_aligned.points), voxel_size
+    )
+    cov_full = voxel_coverage(
+        np.asarray(src_down.points), voxel_size
+    )
+    cov_norm = cov_aligned / max(cov_full, 1)
+
+    # final score (lower is better)
+    score = med + 0.3 * p90 + 0.5 * (1.0 - cov_norm)
+    return score
+
+def run_teaser(source, target, voxel_size):
+    # Compute FPFH using voxel_size (NOT noise_bound)
+    noise_bound = voxel_size# * 1.5
+
+    dst_feats = extract_fpfh(target, voxel_size)
+    src_feats = extract_fpfh(source, voxel_size)
+
+    noise_bound = voxel_size * 1.5
+    correspondences = get_correspondences(source, target, src_feats, dst_feats, distance_threshold=noise_bound*1.5)
 
     src_corr = np.array([source.points[i] for i, _ in correspondences]).T  # 3xN
-    tgt_corr = np.array([target.points[j] for _, j in correspondences]).T  # 3xN
+    dst_corr = np.array([target.points[j] for _, j in correspondences]).T  # 3xN
 
-    params = tpp.RobustRegistrationSolver.Params()
-    params.cbar2 = 1
-    params.noise_bound = float(noise_bound_m)
-    params.estimate_scaling = False
-    params.rotation_estimation_algorithm = tpp.RotationEstimationAlgorithm.GNC_TLS
-    params.rotation_gnc_factor = 1.4
-    params.rotation_max_iterations = 100
-    params.rotation_cost_threshold = 1e-12
+    num_corrs = dst_corr.shape[1]
+    points = np.concatenate((dst_corr.T,src_corr.T),axis=0)
+    lines = []
+    for i in range(num_corrs):
+        lines.append([i,i+num_corrs])
+    colors = [[0, 1, 0] for i in range(len(lines))] # lines are shown in green
+    line_set = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(points),
+        lines=o3d.utility.Vector2iVector(lines),
+    )
+    line_set.colors = o3d.utility.Vector3dVector(colors)
+    o3d.visualization.draw_geometries([target,source,line_set])
+    points = np.concatenate((dst_corr.T,src_corr.T),axis=0)
+    params = teaserpp_python.RobustRegistrationSolver.Params()
+    params.noise_bound = float(noise_bound)
+    params.estimate_scaling = False  # IMPORTANT
+    params.inlier_selection_mode = teaserpp_python.RobustRegistrationSolver.INLIER_SELECTION_MODE.PMC_EXACT
+    params.rotation_tim_graph = teaserpp_python.RobustRegistrationSolver.INLIER_GRAPH_FORMULATION.CHAIN
+    params.rotation_estimation_algorithm = teaserpp_python.RotationEstimationAlgorithm.GNC_TLS
 
-    solver = tpp.RobustRegistrationSolver(params)
-    solver.solve(src_corr, tgt_corr)
+    solver = teaserpp_python.RobustRegistrationSolver(params)
+    solver.solve(src_corr, dst_corr)
     sol = solver.getSolution()
 
-    R = np.asarray(sol.rotation)
-    t = np.asarray(sol.translation).reshape((3, 1))
     T = np.eye(4)
-    T[:3, :3] = R
-    T[:3, 3:] = t
+    T[:3, :3] = np.asarray(sol.rotation)
+    T[:3, 3]  = np.asarray(sol.translation).reshape(3)
     return T
 
-def chamfer_distance(src, dst):
-    d1 = src.compute_point_cloud_distance(dst)
-    d2 = dst.compute_point_cloud_distance(src)
-    # symmetric mean
-    return float(np.mean(d1) + np.mean(d2))
+    
+
+
 
 
 def cloud_resolution(pcd, k=8):
@@ -143,6 +188,7 @@ def cloud_resolution(pcd, k=8):
         if len(dd) > 1:
             dists.extend(np.sqrt(dd[1:]))
     return float(np.median(dists)) if dists else 0.005
+
 
 
 def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0.1):
@@ -166,6 +212,16 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
 
     return result.correspondence_set
 
+def extract_fpfh(pcd, voxel_size):
+  radius_normal = voxel_size
+  nn_param = min(30, len(pcd.points) // 2)  # Adaptive neighbor count
+  pcd.estimate_normals(
+      o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=nn_param))
+
+  radius_feature = voxel_size * 5
+  fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+      pcd, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+  return fpfh
 
 def camera_eye_lookat_up_from_H(H):
     """

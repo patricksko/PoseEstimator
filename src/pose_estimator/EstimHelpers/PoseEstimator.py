@@ -1,8 +1,8 @@
 import os
 import glob
 import pyrealsense2 as rs
-from pose_estimator.EstimHelpers.template_creation import render_lego_views
-from pose_estimator.EstimHelpers.HelpersRealtime import preprocess_point_cloud_uniform, cloud_resolution, get_correspondences, run_teaser, chamfer_distance, camera_eye_lookat_up_from_H, uniform_downsample_farthest_point
+from pose_estimator.EstimHelpers.template_creation import render_templates
+from pose_estimator.EstimHelpers.HelpersRealtime import run_teaser, camera_eye_lookat_up_from_H, alignment_score
 import copy
 import numpy as np
 import open3d as o3d
@@ -30,9 +30,10 @@ class PoseEstimator():
         self.mesh.compute_vertex_normals()
 
         self.target_points = target_points
-        self.templates, self.fpfh_feats = self.load_templates(pcd_path, cad_path)
+        self.templates = self.load_templates(pcd_path, cad_path)
         self.K = K
         self.intr = intr
+        self.voxel_size = 0.05
 
         self.renderer = o3d.visualization.rendering.OffscreenRenderer(self.intr.width, self.intr.height)
         self.scene = self.renderer.scene
@@ -61,82 +62,58 @@ class PoseEstimator():
                 - `src_clouds`: List of downsampled Open3D point clouds corresponding to each template.
                 - `fpfh_fts`: List of FPFH feature objects corresponding to each template.
         """
+        corner=np.array([1,1,1])
         ply_files = sorted(glob.glob(os.path.join(pcd_path, "*.ply")))
         # create templates if there are no ply files in folder
         if not ply_files:
-            render_lego_views(mesh_path=cad_path, output_dir=pcd_path)
+            render_templates(mesh_path=cad_path, output_dir=pcd_path)
             ply_files = sorted(glob.glob(os.path.join(pcd_path, "*.ply")))
 
         src_clouds = []
-        fpfh_fts = []
         for ply_file in ply_files:
             src = o3d.io.read_point_cloud(ply_file)
             if len(src.points) == 0:
                 print("Empty point cloud!")
                 return None, None
-            
-            src_down = uniform_downsample_farthest_point(src, self.target_points) # Downsample the pointcloud to target_poins 
 
-            # Estimate normals with adaptive parameters
-            nn_param = min(30, len(src_down.points) // 2)  # Adaptive neighbor count
-            radius = 0.05  # You might want to adjust this based on your data scale
-            
-            src_down.estimate_normals(
-                o3d.geometry.KDTreeSearchParamHybrid(radius=radius, max_nn=nn_param)
-            )
-            
-            # Compute FPFH features
-            fpfh = o3d.pipelines.registration.compute_fpfh_feature(
-                src_down,
-                o3d.geometry.KDTreeSearchParamHybrid(radius=radius*2.5, max_nn=100)
-            )
-            src_clouds.append(src_down)
-            fpfh_fts.append(fpfh)
-
-            print(f"Loaded: {ply_file} with {len(src.points)} points")
-        return src_clouds, fpfh_fts
+            # src_down = uniform_downsample_farthest_point(src, self.target_points) # Downsample the pointcloud to target_poins 
+            src_clouds.append(src)
+    
+        return src_clouds
     
     
     def find_best_template_teaser(self, dst_cloud):
-        dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, self.target_points)
-        if not dst_down.has_normals():
-            dst_down.estimate_normals()
-        res = cloud_resolution(dst_down)
-        noise_bound = 1.5 * res           # adaptive, often far better than a fixed 1mm
-        match_max_dist = 4.0 * res        # cap for geometric plausibility
-
-        best = dict(T=np.eye(4), score=np.inf)
+        # dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, self.target_points)
+        dst_down = dst_cloud.voxel_down_sample(self.voxel_size)
+        best = dict(T=np.eye(4), score=np.inf, src=None)
         
-        for src_down, src_fpfh in zip(self.templates, self.fpfh_feats):
-            if src_down is None:
+        for src in self.templates:
+            if src is None:
                 continue
-            if not src_down.has_normals():
-                src_down.estimate_normals()
-            correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=match_max_dist)
-            if len(correspondences) < 5:
-                print("Not enough correspondences")
-                continue
-            H = run_teaser(src_down, dst_down, correspondences, noise_bound_m=noise_bound)
+            src_down = src.voxel_down_sample(self.voxel_size)
+            # correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=match_max_dist)
+
+            H = run_teaser(src_down, dst_down, voxel_size=self.voxel_size)
             icp_result = o3d.pipelines.registration.registration_icp(
-                src_down, dst_down, 0.01, H,
-                o3d.pipelines.registration.TransformationEstimationPointToPoint()
+                src_down, dst_down, 0.05, H,
+                o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+                o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=1000)
             )
             refined_transform = icp_result.transformation  # refined
 
             T_full = refined_transform
             src_aligned = copy.deepcopy(src_down).transform(T_full)
-            alpha = 1
-        
+            score = alignment_score(
+                src_aligned, src_down, dst_down, self.voxel_size
+            )
 
-            geom_err = chamfer_distance(src_aligned, dst_cloud)
-
-            # Combined score
-            score = alpha * geom_err
 
             if score < best["score"]:
-                best.update(T=T_full, score=score)
+                best["score"] = score
+                best["T"] = H
+                best["src"] = src_down
 
-        return best["T"]
+        return best["T"], best["src"]
     
     def create_template_from_H(self, T_m2c, target_points):
         near, far = 0.01, 5.0

@@ -3,9 +3,11 @@ import argparse, os, numpy as np, cv2, open3d as o3d, yaml
 # from tf_transformations import euler_matrix
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
-from EstimHelpers.detection_utils import detect_mask
-from EstimHelpers.registration_utils import find_best_template_teaser
-from EstimHelpers.template_creation import render_lego_views
+from pose_estimator.EstimHelpers.HelpersRealtime import *
+from pose_estimator.EstimHelpers.RealSenseClass import RealSenseCamera
+from pose_estimator.EstimHelpers.PoseEstimator import PoseEstimator
+from pose_estimator.EstimHelpers.Detector import Detector
+from pose_estimator.EstimHelpers.template_creation import render_templates
 import glob
 import copy
 from colorama import Fore, Style
@@ -13,7 +15,8 @@ from colorama import Fore, Style
 ######## Global Variables  #########
 WEIGHTS = "./data/best.pt"
 PLY_PATH = "./data/seibersdorf_views/"
-CAD_PATH = "./data/block_seibersdorf.ply"
+CAD_PATH = "./data/_Daten_Seibersdorf_Patrick/ConcreteBlock.ply"
+
 
 def print_cloud_info(name, cloud):
     if isinstance(cloud, o3d.geometry.PointCloud):
@@ -34,6 +37,7 @@ def print_cloud_info(name, cloud):
     print(f"  Center: {bbox.get_center()}")
     print(f"  Extents: {extents} (x,y,z)")
     print(f"  Diagonal length: {np.linalg.norm(extents)}")
+
 def project_points(points_3d, K, T_m2c):
     """Project 3D points into image pixels."""
     pts_h = np.hstack((points_3d, np.ones((points_3d.shape[0], 1))))  # Nx4
@@ -77,22 +81,29 @@ def project_count(pts, R, t, K, D, W, H):
     return int(in_img.sum()), front, uv, in_img
 
 def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max_points=250000):
-    
-    # Read Pointcloud Templates and append them to list (Source)
-    ply_files = sorted(glob.glob(os.path.join(PLY_PATH, "*.ply"))) 
-    if not ply_files:
-        render_lego_views(mesh_path="./data/block_seibersdorf.ply", output_dir="./data/seibersdorf_views")
-        ply_files = sorted(glob.glob(os.path.join(PLY_PATH, "*.ply")))
-    src_clouds = []
-    for ply_file in ply_files:
-        src = o3d.io.read_point_cloud(ply_file)
-        src_clouds.append(src)
-        print(f"Loaded: {ply_file} with {len(src.points)} points")
+    K, D, T = load_calib(calib_path)
+    img_bgr = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    if img_bgr is None: raise SystemExit(f"Failed to read image: {image_path}")
+    img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB); H, W = img.shape[:2]
+    img_arr = np.asarray(img_bgr)
+
+    height = img_bgr.shape[0]
+    width  = img_bgr.shape[1]
+
+    intr = o3d.camera.PinholeCameraIntrinsic(
+    width,
+    height,
+    K[0, 0],  # fx
+    K[1, 1],  # fy
+    K[0, 2],  # cx
+    K[1, 2],  # cy
+)
+    estimator = PoseEstimator(CAD_PATH, PLY_PATH, intr, K, 500) # call the constructor of PoseEstimator for 6d-Pose
+    detector = Detector(WEIGHTS)
     mesh = o3d.io.read_triangle_mesh(CAD_PATH)
 
     # Ensure normals exist (optional, helps for visualization)
     mesh.compute_vertex_normals()
-    #mesh.scale(0.001, center=mesh.get_center())
     
 
     # Sample N points uniformly on the surface
@@ -102,12 +113,15 @@ def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max
     cad_points = np.asarray(pcd.points)
     print("Sampled CAD points:", cad_points.shape)
     
-    img_bgr = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    if img_bgr is None: raise SystemExit(f"Failed to read image: {image_path}")
-    img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB); H, W = img.shape[:2]
-    img_arr = np.asarray(img_bgr)
-    mask = detect_mask(WEIGHTS, img)   # Detect mask of Object with YOLO Network
+    
+    detections = detector.detect_mask(img)
 
+    print(detections)
+    if len(detections) == 0:
+        exit()
+    mask = detections[0]["mask"]
+    
+    
     # Cloud
     pcd = o3d.io.read_point_cloud(cloud_path)
     if len(pcd.points) == 0: raise SystemExit(f"No points in cloud: {cloud_path}")
@@ -116,7 +130,7 @@ def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max
         pts = pts[np.random.choice(pts.shape[0], max_points, replace=False)]
 
     # Calib
-    K, D, T = load_calib(calib_path)
+    
 
     # Build candidates
     T_inv = np.linalg.inv(T)
@@ -150,31 +164,28 @@ def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max
     pcd_col = o3d.geometry.PointCloud()
     pcd_col.points = o3d.utility.Vector3dVector(pts_col)
     pcd_col.colors = o3d.utility.Vector3dVector(colors)
-    print_cloud_info("Scene target", pcd_col)
-    o3d.visualization.draw([pcd_col], bg_color=(0, 0, 0, 1))
+    pcd_clean, _ = pcd_col.remove_statistical_outlier(
+        nb_neighbors=30,
+        std_ratio=1.0
+    )
+    
+    print_cloud_info("Scene target", pcd_clean)
+    o3d.visualization.draw([pcd_clean], bg_color=(0, 0, 0, 1))
 
-    # Read Pointcloud Templates and append them to list (Source)
-    ply_files = sorted(glob.glob(os.path.join(PLY_PATH, "*.ply")))  
-    src_clouds = []
-    for ply_file in ply_files:
-        src = o3d.io.read_point_cloud(ply_file)
-        src_clouds.append(src)
-        print(f"Loaded: {ply_file} with {len(src.points)} points")
-
-    dst_cloud = copy.deepcopy(pcd_col)
+    dst_cloud = copy.deepcopy(pcd_clean)
     if dst_cloud is None or len(dst_cloud.points) == 0:
             print("Failed to generate scene point cloud!")
             exit(1)
     
 
-    best_idx, H, best_inliers, all_metrics = find_best_template_teaser(dst_cloud, src_clouds, target_points=100)
-    for m in all_metrics:
-        print(f"Template {m['template_idx']}: Chamfer = {m['score']:.6f}")
-    print(best_idx)
-    # Apply final transformation
-    if best_idx >= 0:
-        src_cloud = copy.deepcopy(src_clouds[best_idx])
-        src_cloud.transform(H)
+    H, src_down = estimator.find_best_template_teaser(dst_cloud)
+    o3d.visualization.draw_geometries([
+        src_down.paint_uniform_color([1, 0, 0]),
+        dst_cloud.paint_uniform_color([0, 1, 1])
+    ], window_name="Initial Alignment before TEASER")
+
+    src_cloud = copy.deepcopy(src_down)
+    src_cloud.transform(H)
     print(H)
         
     # 7. Visualization
@@ -202,9 +213,9 @@ def project_and_colorize(image_path, cloud_path, calib_path, save_path=None, max
     cv2.destroyAllWindows()
 if __name__ == "__main__":
     project_and_colorize(
-        image_path="./data/seibersdorf/export_images_01/rgb_1752488483145676170.png",
-        cloud_path="./data/seibersdorf/export_pointclouds_01/cloud_1752488483100407156.ply",
-        calib_path="./data/seibersdorf/calib.yaml",
-        save_path="./data/seibersdorf/colored_cloud.ply",
+        image_path="./data/_Daten_Seibersdorf_Patrick/exported_rgb_pcl/1765974786.360612.png",
+        cloud_path="./data/_Daten_Seibersdorf_Patrick/exported_rgb_pcl/1765974786.360612.ply",
+        calib_path="./data/_Daten_Seibersdorf_Patrick/calib_zed2i_to_seyond.yaml",
+        save_path="./data/_Daten_Seibersdorf_Patrick/colored_cloud.ply",
         max_points=20000000
     )
