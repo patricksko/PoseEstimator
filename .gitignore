@@ -8,8 +8,7 @@ blender
 .vscode/
 output/
 debug/
-datageneration/Blenderproc/resources/*
-datageneration/Blenderproc/output/*
+datageneration/*
 detection/YOLO/output_runs/*
 
 *.blend1
