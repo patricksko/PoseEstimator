@@ -18,12 +18,14 @@ def generate_segmentation_polygons_yolo_format(weights_path, image_path, output_
         imgsz=640,
         conf=0.8,
         device="0",
-        save=True,
+        save=False,
+        show=True,
     )
+    
 
 if __name__ == "__main__":
-    weights = "/home/skoumal/dev/ObjectDetection/data/best.pt"
-    img_path = "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output/output_blenderproc/bop_data/Legoblock_full/train_pbr/002014/rgb/000000.jpg"
+    weights = "./data/best.pt"
+    img_path = "./data/_Daten_Seibersdorf_Patrick/exported_rgb_pcl/1765975160.708315.png"
     out_dir = "/home/skoumal/dev/ObjectDetection/data/"
 
     generate_segmentation_polygons_yolo_format(weights, img_path, out_dir)

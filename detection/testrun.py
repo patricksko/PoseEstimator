@@ -19,6 +19,11 @@ def draw_yolo_polygons(image_path, label_path):
             continue  # invalid line
 
         class_id = int(parts[0])
+        # print(class_id)
+        if class_id != 4:
+            continue
+
+
         coords = list(map(float, parts[1:]))
         points = [(int(x * w), int(y * h)) for x, y in zip(coords[::2], coords[1::2])]
 
@@ -35,4 +40,4 @@ def draw_yolo_polygons(image_path, label_path):
     cv2.destroyAllWindows()
 
 # Example usage
-draw_yolo_polygons("/home/skoumal/dev/ObjectDetection/data/train_tuutuuut/images/000004_000009.jpg", "/home/skoumal/dev/ObjectDetection/data/train_tuutuuut/labels/000004_000009.txt")
+draw_yolo_polygons("/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output/output_tetris/bop_data/tetris/train_tuutuuut/images/000000_000000.jpg", "/home/skoumal/dev/ObjectDetection/datageneration/Blenderproc/output/output_tetris/bop_data/tetris/train_tuutuuut/labels/000000_000000.txt")
