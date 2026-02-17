@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import glob
 import pyrealsense2 as rs
 from pose_estimator.EstimHelpers.template_creation import render_templates
@@ -25,22 +26,23 @@ class PoseEstimator():
         
         if intr is None or K is None:
             return
-
-        self.mesh = o3d.io.read_triangle_mesh(cad_path)
-        self.mesh.compute_vertex_normals()
+        self.cad_path = Path(cad_path)
+        
+        self._mesh_cache = {}
+        self._current_obj_id = None
+        self._geom_name = "mesh"
 
         self.target_points = target_points
         self.templates = self.load_templates(pcd_path, cad_path)
         self.K = K
         self.intr = intr
-        self.voxel_size = 0.05
+        self.voxel_size = 0.005
 
         self.renderer = o3d.visualization.rendering.OffscreenRenderer(self.intr.width, self.intr.height)
         self.scene = self.renderer.scene
         self.scene.set_background([1, 1, 1, 1])
-        mat = o3d.visualization.rendering.MaterialRecord()
-        mat.shader = "defaultLit"
-        self.scene.add_geometry("mesh", self.mesh, mat)
+        
+        # self.scene.add_geometry("mesh", self.mesh, mat)
 
     def load_templates(self, pcd_path: str, cad_path: str):
         """
@@ -62,40 +64,65 @@ class PoseEstimator():
                 - `src_clouds`: List of downsampled Open3D point clouds corresponding to each template.
                 - `fpfh_fts`: List of FPFH feature objects corresponding to each template.
         """
-        corner=np.array([1,1,1])
-        ply_files = sorted(glob.glob(os.path.join(pcd_path, "*.ply")))
-        # create templates if there are no ply files in folder
-        if not ply_files:
-            render_templates(mesh_path=cad_path, output_dir=pcd_path)
-            ply_files = sorted(glob.glob(os.path.join(pcd_path, "*.ply")))
+        exp_folders = len(os.listdir(cad_path))
+        src_clouds = []
+
+        pcd_path = Path(pcd_path)
+        pcd_path.mkdir(parents=True, exist_ok=True)
+
+        expected_names = {f"obj{i:02d}" for i in range(1, exp_folders + 1)}
+        existing_folders = {p.name for p in pcd_path.glob("obj*") if p.is_dir()}
+        missing = sorted(expected_names - existing_folders)
+
+        for obj in missing:
+            obj_id = int(obj[-2:])
+            obj_pth = Path(cad_path, f"obj_{obj_id:06}.ply")
+            render_path = pcd_path / obj
+
+            if not obj_pth.exists():
+                print(f"[WARN] CAD not found: {obj_pth} (skipping render)")
+                continue
+
+            render_path.mkdir(parents=True, exist_ok=True)
+            render_templates(mesh_path=obj_pth, output_dir=render_path)
 
         src_clouds = []
-        for ply_file in ply_files:
-            src = o3d.io.read_point_cloud(ply_file)
-            if len(src.points) == 0:
-                print("Empty point cloud!")
-                return None, None
+        obj_folders = sorted([p for p in pcd_path.glob("obj*") if p.is_dir()])
 
-            # src_down = uniform_downsample_farthest_point(src, self.target_points) # Downsample the pointcloud to target_poins 
-            src_clouds.append(src)
-    
+        for folder in obj_folders:
+            ply_files = sorted(folder.glob("*.ply"))
+            if not ply_files:
+                print(f"[WARN] No .ply files in {folder}")
+                continue
+
+            for ply_file in ply_files:
+                src = o3d.io.read_point_cloud(str(ply_file))
+                if len(src.points) == 0:
+                    print(f"[WARN] Empty point cloud: {ply_file} (skipping)")
+                    continue
+
+                src_clouds.append(src)
+
         return src_clouds
     
     
-    def find_best_template_teaser(self, dst_cloud):
+    def find_best_template_teaser(self, dst_cloud, class_id):
         # dst_down, dst_fpfh = preprocess_point_cloud_uniform(dst_cloud, self.target_points)
+        num_templates = 8  # hardcoded TODO: make dynamic based on class_id
+        templates = self.templates[class_id * num_templates:(class_id + 1) * num_templates]
         dst_down = dst_cloud.voxel_down_sample(self.voxel_size)
-        best = dict(T=np.eye(4), score=np.inf, src=None)
+        best = dict(T=np.eye(4), score=-1, src=None)
         
-        for src in self.templates:
+        for src in templates:
             if src is None:
                 continue
             src_down = src.voxel_down_sample(self.voxel_size)
             # correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=match_max_dist)
 
             H = run_teaser(src_down, dst_down, voxel_size=self.voxel_size)
+            max_corr = 1.5 * self.voxel_size
             icp_result = o3d.pipelines.registration.registration_icp(
-                src_down, dst_down, 0.05, H,
+                src_down, dst_down, max_corr, H,
                 o3d.pipelines.registration.TransformationEstimationPointToPoint(),
                 o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=1000)
             )
@@ -103,22 +130,42 @@ class PoseEstimator():
 
             T_full = refined_transform
             src_aligned = copy.deepcopy(src_down).transform(T_full)
-            score = alignment_score(
-                src_aligned, src_down, dst_down, self.voxel_size
-            )
+            #rmse, overlap = alignment_score(src_aligned, dst_down, self.voxel_size)
+            score = icp_result.fitness
 
+            # o3d.visualization.draw_geometries([src_aligned.paint_uniform_color([1, 0, 0]), dst_down.paint_uniform_color([0, 1, 0])], window_name=f"Chamfer: {score}")
 
-            if score < best["score"]:
+            if score > best["score"]:
                 best["score"] = score
                 best["T"] = H
                 best["src"] = src_down
 
         return best["T"], best["src"]
     
-    def create_template_from_H(self, T_m2c, target_points):
+    def _get_mesh(self, obj_id: int):
+        if obj_id not in self._mesh_cache:
+            mesh_path = Path(self.cad_path) / f"obj_{obj_id:06}.ply"
+            mesh = o3d.io.read_triangle_mesh(str(mesh_path))
+            mesh.compute_vertex_normals()
+            self._mesh_cache[obj_id] = mesh
+        return self._mesh_cache[obj_id]
+
+    def create_template_from_H(self, T_m2c, target_points, class_id=0):
+        obj_id = class_id + 1
+        print(obj_id)
+        mesh = self._get_mesh(obj_id)
+
+        # swap geometry only if object changed
+        if self._current_obj_id != obj_id:
+            mat = o3d.visualization.rendering.MaterialRecord()
+            mat.shader = "defaultLit"
+
+            if self.scene.has_geometry(self._geom_name):
+                self.scene.remove_geometry(self._geom_name)
+                self.scene.add_geometry(self._geom_name, mesh, mat)
+                self._current_obj_id = obj_id
         near, far = 0.01, 5.0
         self.scene.camera.set_projection(self.K, near, far, self.intr.width, self.intr.height)
-
         # Extrinsics from current T_m2c
         eye, target, up = camera_eye_lookat_up_from_H(T_m2c)
         self.scene.camera.look_at(target, eye, up)
@@ -138,4 +185,4 @@ class PoseEstimator():
             idx = np.random.choice(pts.shape[0], target_points, replace=False)
             src = src.select_by_index(idx)
 
-        return src
+        return src, mesh

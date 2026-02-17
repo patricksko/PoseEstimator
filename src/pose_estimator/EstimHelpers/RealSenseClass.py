@@ -31,6 +31,7 @@ class RealSenseCamera:
         depth_frame = frameset.get_depth_frame()
         color_frame = frameset.get_color_frame()
         if not depth_frame or not color_frame:
+            print("Shiti")
             return None, None
 
         # apply filters

@@ -85,8 +85,8 @@ def get_reduced_camera_positions(distance, center):
     #     })
 
     # face_dirs = [
-        # (np.array([1,  0,  0]), '2'),
-        # (np.array([0,  0,  1]), '3')
+    #     (np.array([1,  0,  0]), '2'),
+    #     (np.array([0,  0,  1]), '3')
     # ]
     # for d, name in face_dirs:
     #     positions.append({
@@ -97,35 +97,35 @@ def get_reduced_camera_positions(distance, center):
     #     })
     # --- Edges (4) ---
     edge_dirs = [
-        # (np.array([ 1,  1, 0]), '4'),
+        #(np.array([ 1,  1, 0]), '4'),
         # (np.array([ 1, -1, 0]), '5'),
         (np.array([ 0,  1, 1]), '6'),
         (np.array([ 0, -1, 1]), '7'),
         (np.array([ 1, 0, 1]), '8'),
-        # (np.array([ 1, 0, -1]), '9')
+        (np.array([ -1, 0, 1]), '9')
     ]
     for d, name in edge_dirs:
         d = d / np.linalg.norm(d)
         positions.append({
             'eye': d * distance,
             'target': np.array([0, 0, 0]),
-            'up': np.array([0, 1, 0]),
+            'up': np.array([0, 0, 1]),
             'type': name
         })
 
     # --- Corners (3) ---
     corner_dirs = [
-        # (np.array([ 1,  1, -1]), '10'),
-        (np.array([ 1,  1,  1]), '11'),
-        (np.array([ 1, -1,  1]), '12'),
-        # (np.array([ 1, -1, -1]), '13')
+        (np.array([ 1,  1, 1]), '10'),
+        (np.array([ -1,  1,  1]), '11'),
+        (np.array([ 1, -1,  1]), '12'), ###
+        (np.array([ -1, -1, 1]), '13')
     ]
     for d, name in corner_dirs:
         d = d / np.linalg.norm(d)
         positions.append({
             'eye': d * distance,
             'target': np.array([0, 0, 0]),
-            'up': np.array([0, 1, 0]),
+            'up': np.array([0, 0, 1]),
             'type': name
         })
 
@@ -158,7 +158,7 @@ def render_templates(mesh_path, output_dir, synthetic_rendering = "Random"):
         mesh.scale(0.001, center=np.array([0,0,0]))  # scale to meters
         bbox = mesh.get_axis_aligned_bounding_box()
         print("Dimension of object is in mm", size)
- 
+
     diag = np.linalg.norm(bbox.get_extent())  # size of mesh diagonal
     distance = diag * 2.0   # put camera 2x diagonal away
 
@@ -166,7 +166,7 @@ def render_templates(mesh_path, output_dir, synthetic_rendering = "Random"):
     camera_positions = get_reduced_camera_positions(distance=distance, center=np.array([0,0,0]))
     # Center the mesh at origin
     trans_center = mesh.get_center()
-    print(trans_center)
+    # print(trans_center)
     mesh.translate(-trans_center)
     
     # Set blue color for the mesh

@@ -97,37 +97,6 @@ def preprocess_point_cloud_uniform(pcd, target_points=500, calc_fpfh=False):
 
     return pcd_down, fpfh
 
-def nn_residuals(src_aligned, dst_cloud):
-    src_pts = np.asarray(src_aligned.points)
-    dst_pts = np.asarray(dst_cloud.points)
-    tree = cKDTree(dst_pts)
-    dists, _ = tree.query(src_pts, k=1, workers=-1)
-    print("hahahahahahhahahahaha")
-    return dists
-
-def voxel_coverage(points, voxel_size):
-    voxels = np.floor(points / voxel_size).astype(np.int32)
-    return len(np.unique(voxels, axis=0))
-
-def alignment_score(src_aligned, src_down, dst_down, voxel_size):
-    dists = nn_residuals(src_aligned, dst_down)
-    if dists is None:
-        return np.inf
-
-    med = np.median(dists)
-    p90 = np.percentile(dists, 90)
-
-    cov_aligned = voxel_coverage(
-        np.asarray(src_aligned.points), voxel_size
-    )
-    cov_full = voxel_coverage(
-        np.asarray(src_down.points), voxel_size
-    )
-    cov_norm = cov_aligned / max(cov_full, 1)
-
-    # final score (lower is better)
-    score = med + 0.3 * p90 + 0.5 * (1.0 - cov_norm)
-    return score
 
 def run_teaser(source, target, voxel_size):
     # Compute FPFH using voxel_size (NOT noise_bound)
@@ -142,19 +111,19 @@ def run_teaser(source, target, voxel_size):
     src_corr = np.array([source.points[i] for i, _ in correspondences]).T  # 3xN
     dst_corr = np.array([target.points[j] for _, j in correspondences]).T  # 3xN
 
-    num_corrs = dst_corr.shape[1]
-    points = np.concatenate((dst_corr.T,src_corr.T),axis=0)
-    lines = []
-    for i in range(num_corrs):
-        lines.append([i,i+num_corrs])
-    colors = [[0, 1, 0] for i in range(len(lines))] # lines are shown in green
-    line_set = o3d.geometry.LineSet(
-        points=o3d.utility.Vector3dVector(points),
-        lines=o3d.utility.Vector2iVector(lines),
-    )
-    line_set.colors = o3d.utility.Vector3dVector(colors)
-    o3d.visualization.draw_geometries([target,source,line_set])
-    points = np.concatenate((dst_corr.T,src_corr.T),axis=0)
+    # num_corrs = dst_corr.shape[1]
+    # points = np.concatenate((dst_corr.T,src_corr.T),axis=0)
+    # lines = []
+    # for i in range(num_corrs):
+    #     lines.append([i,i+num_corrs])
+    # colors = [[0, 1, 0] for i in range(len(lines))] # lines are shown in green
+    # line_set = o3d.geometry.LineSet(
+    #     points=o3d.utility.Vector3dVector(points),
+    #     lines=o3d.utility.Vector2iVector(lines),
+    # )
+    # line_set.colors = o3d.utility.Vector3dVector(colors)
+    # o3d.visualization.draw_geometries([target,source,line_set])
+    # points = np.concatenate((dst_corr.T,src_corr.T),axis=0)
     params = teaserpp_python.RobustRegistrationSolver.Params()
     params.noise_bound = float(noise_bound)
     params.estimate_scaling = False  # IMPORTANT
@@ -171,8 +140,31 @@ def run_teaser(source, target, voxel_size):
     T[:3, 3]  = np.asarray(sol.translation).reshape(3)
     return T
 
-    
+def alignment_score(src, dst, voxel_size, tau=0.02, trim_ratio=0.8):
+    src.estimate_normals(
+        o3d.geometry.KDTreeSearchParamHybrid(radius=2*voxel_size, max_nn=30)
+    )
+    dst.estimate_normals(
+        o3d.geometry.KDTreeSearchParamHybrid(radius=2*voxel_size, max_nn=30)
+    )
+    dists = np.asarray(src.compute_point_cloud_distance(dst))
 
+    # inlier mask
+    inliers = dists < tau
+    if np.sum(inliers) < 10:
+        return np.inf, 0.0
+
+    # trimmed RMSE (robust)
+    sorted_d = np.sort(dists[inliers])
+    k = int(len(sorted_d) * trim_ratio)
+    trimmed = sorted_d[:k]
+
+    rmse = np.sqrt(np.mean(trimmed**2))
+
+    # overlap ratio
+    overlap = np.sum(inliers) / len(src.points)
+
+    return rmse, overlap
 
 
 
