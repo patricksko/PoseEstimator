@@ -35,7 +35,7 @@ class Detector:
         results = self.yolo(source=img_bgr, conf=conf, device=0, save=False, show=False, verbose=False)
 
         detections = []
-
+        
         for r in results:
             if not hasattr(r, "masks") or r.masks is None:
                 continue
