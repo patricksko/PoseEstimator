@@ -6,7 +6,7 @@ class Detector:
     def __init__(self, yolo_weights: str):
         self.yolo = YOLO(yolo_weights)
 
-    def detect_mask(self ,img_bgr, class_id=0, conf=0.7):
+    def detect_mask(self ,img_bgr, conf=0.7):
         """
         Detects and extracts the segmentation mask of target objects in an RGB image
         using the YOLO segmentation model.
@@ -33,7 +33,6 @@ class Detector:
         h, w = img_bgr.shape[:2]
         mask = np.zeros((h, w), dtype=np.uint8)
         results = self.yolo(source=img_bgr, conf=conf, device=0, save=False, show=False, verbose=False)
-
         detections = []
         
         for r in results:
