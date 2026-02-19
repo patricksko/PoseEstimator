@@ -133,7 +133,7 @@ class PoseEstimator():
             #rmse, overlap = alignment_score(src_aligned, dst_down, self.voxel_size)
             score = icp_result.fitness
 
-            # o3d.visualization.draw_geometries([src_aligned.paint_uniform_color([1, 0, 0]), dst_down.paint_uniform_color([0, 1, 0])], window_name=f"Chamfer: {score}")
+            o3d.visualization.draw_geometries([src_aligned.paint_uniform_color([1, 0, 0]), dst_down.paint_uniform_color([0, 1, 0])], window_name=f"Chamfer: {score}")
 
             if score > best["score"]:
                 best["score"] = score
