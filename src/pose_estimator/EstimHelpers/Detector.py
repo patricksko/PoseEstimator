@@ -1,10 +1,12 @@
 from ultralytics import YOLO# --- GPU SUPPORT ---
+from ultralytics import SAM
 import numpy as np
 import cv2
 
 class Detector:
-    def __init__(self, yolo_weights: str):
+    def __init__(self, yolo_weights: str, sam_weights: str):
         self.yolo = YOLO(yolo_weights)
+        self.sam = SAM(sam_weights)
 
     def detect_mask(self ,img_bgr, conf=0.7):
         """
@@ -33,28 +35,37 @@ class Detector:
         h, w = img_bgr.shape[:2]
         mask = np.zeros((h, w), dtype=np.uint8)
         results = self.yolo(source=img_bgr, conf=conf, device=0, save=False, show=False, verbose=False)
+        results = results[0]
         detections = []
         
-        for r in results:
-            if not hasattr(r, "masks") or r.masks is None:
+        if results.masks is None:
+            return None
+        for poly, cls, data, bbox in zip(
+                results.masks.xy,
+                results.boxes.cls,
+                results.masks.data,
+                results.boxes.xyxy
+        ):
+            result_sam = self.sam(img_bgr, bboxes=bbox.cpu().numpy().tolist())
+            if result_sam[0].masks is None:
                 continue
-            for poly, cls, cf, bbox in zip(
-                    r.masks.xy,
-                    r.boxes.cls,
-                    r.boxes.conf,
-                    r.boxes.xyxy
-            ):
-                poly_np = np.array(poly, dtype=np.int32)
+            
+            # print("A"*50)
+            # print(result_sam[0].masks.data.cpu(), type(result_sam[0].masks.data.cpu()))
+            # print("B"*50)
+            # print(data.cpu(), type(data.cpu()))
+            # poly_np = np.array(result_sam[0].xy, dtype=np.int32)
 
-                # Create binary mask
-                mask = np.zeros((h, w), dtype=np.uint8)
-                cv2.fillPoly(mask, [poly_np], 255)
+            # Create binary mask
+            mask = result_sam[0].masks.data.cpu()#np.zeros((h, w), dtype=np.uint8)
+            mask = mask.squeeze(0)
+            # cv2.fillPoly(mask, [poly_np], 255)
 
-                detections.append({
-                    "mask": mask,
-                    "class_id": int(cls),
-                    # "bbox": bbox.cpu().numpy().tolist()
-                })
+            detections.append({
+                "mask": mask,
+                "class_id": int(cls),
+                # "bbox": bbox.cpu().numpy().tolist()
+            })
 
         return detections
     
