@@ -123,7 +123,7 @@ class PoseEstimator():
             max_corr = 1.5 * self.voxel_size
             icp_result = o3d.pipelines.registration.registration_icp(
                 src_down, dst_down, max_corr, H,
-                o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+                o3d.pipelines.registration.TransformationEstimationPointToPlane(),
                 o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=1000)
             )
             refined_transform = icp_result.transformation  # refined
