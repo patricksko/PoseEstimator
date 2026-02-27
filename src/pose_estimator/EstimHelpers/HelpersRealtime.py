@@ -100,13 +100,12 @@ def preprocess_point_cloud_uniform(pcd, target_points=500, calc_fpfh=False):
 
 def run_teaser(source, target, voxel_size):
     # Compute FPFH using voxel_size (NOT noise_bound)
-    noise_bound = voxel_size# * 1.5
 
     dst_feats = extract_fpfh(target, voxel_size)
     src_feats = extract_fpfh(source, voxel_size)
 
     noise_bound = voxel_size * 1.5
-    correspondences = get_correspondences(source, target, src_feats, dst_feats, distance_threshold=noise_bound*1.5)
+    correspondences = get_correspondences(source, target, src_feats, dst_feats, distance_threshold=noise_bound)
 
     src_corr = np.array([source.points[i] for i, _ in correspondences]).T  # 3xN
     dst_corr = np.array([target.points[j] for _, j in correspondences]).T  # 3xN
@@ -205,7 +204,7 @@ def get_correspondences(pcd1_down, pcd2_down, fpfh1, fpfh2, distance_threshold=0
     return result.correspondence_set
 
 def extract_fpfh(pcd, voxel_size):
-  radius_normal = voxel_size
+  radius_normal = 3*voxel_size
   nn_param = min(30, len(pcd.points) // 2)  # Adaptive neighbor count
   pcd.estimate_normals(
       o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=nn_param))

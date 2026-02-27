@@ -117,7 +117,7 @@ class PoseEstimator():
             if src is None:
                 continue
             src_down = src.voxel_down_sample(self.voxel_size)
-            # correspondences = get_correspondences(src_down, dst_down, src_fpfh, dst_fpfh, distance_threshold=match_max_dist)
+            # o3d.visualization.draw_geometries([src_down.paint_uniform_color([1, 0, 0]), dst_down.paint_uniform_color([0, 1, 0])])
 
             H = run_teaser(src_down, dst_down, voxel_size=self.voxel_size)
             max_corr = 1.5 * self.voxel_size
@@ -130,14 +130,13 @@ class PoseEstimator():
 
             T_full = refined_transform
             src_aligned = copy.deepcopy(src_down).transform(T_full)
-            #rmse, overlap = alignment_score(src_aligned, dst_down, self.voxel_size)
             score = icp_result.fitness
 
-            o3d.visualization.draw_geometries([src_aligned.paint_uniform_color([1, 0, 0]), dst_down.paint_uniform_color([0, 1, 0])], window_name=f"Chamfer: {score}")
+            # o3d.visualization.draw_geometries([src_aligned.paint_uniform_color([1, 0, 0]), dst_down.paint_uniform_color([0, 1, 0])], window_name=f"Fitness: {score}")
 
             if score > best["score"]:
                 best["score"] = score
-                best["T"] = H
+                best["T"] = T_full
                 best["src"] = src_down
 
         return best["T"], best["src"]

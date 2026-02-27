@@ -8,29 +8,6 @@ def fx_from_fov(fov_deg, width):
     f = 0.5 * width / np.tan(np.deg2rad(fov_deg) / 2.0)
     return f
 
-def add_depth_noise(depth_img, sigma=0.002, prob_missing=0.0):
-    depth = np.asarray(depth_img, dtype=np.float32)
-    noise = np.random.normal(0, sigma, depth.shape)
-    depth_noisy = depth + noise
-
-    # Optional: randomly drop some pixels
-    if prob_missing > 0:
-        mask = np.random.rand(*depth.shape) < prob_missing
-        depth_noisy[mask] = 0.0  # mark as invalid
-    
-    depth_noisy = np.clip(depth_noisy, 0, None)
-    return o3d.geometry.Image(depth_noisy)
-
-def add_depth_dependent_noise(depth_img, base_sigma=0.001):
-    depth = np.asarray(depth_img, dtype=np.float32)
-    sigma = base_sigma * (depth ** 2)  # noise grows quadratically with distance
-    noise = np.random.normal(0, sigma)
-    depth_noisy = depth + noise
-    depth_noisy = np.clip(depth_noisy, 0, None)
-    return o3d.geometry.Image(depth_noisy)
-
-
-
 def sample_n_points(pcd, n=200):
     pts = np.asarray(pcd.points)
     if pts.shape[0] <= n:
@@ -132,16 +109,10 @@ def get_reduced_camera_positions(distance, center):
     return positions  # total: 14
 
 
-def sample_mesh_points(mesh, num_points=100):
-    """Sample points from mesh surface"""
-    return mesh.sample_points_uniformly(number_of_points=num_points)
 
 def render_templates(mesh_path, output_dir, synthetic_rendering = "Random"):
-    """Main function to render 26 views of the Lego block"""
-    print(f"Rendering templates for {mesh_path} into {output_dir} with rendering mode: {synthetic_rendering}")
     if not os.path.exists(mesh_path):
         print(f"Error: Could not find {mesh_path}")
-        print("Please update the mesh_path variable with the correct path to your .ply file")
         return
     
     mesh = o3d.io.read_triangle_mesh(mesh_path)  # read mesh 
@@ -170,12 +141,12 @@ def render_templates(mesh_path, output_dir, synthetic_rendering = "Random"):
     mesh.translate(-trans_center)
     
     # Set blue color for the mesh
-    mesh.paint_uniform_color([0.0, 0.0, 1.0])
+    mesh.paint_uniform_color([0.0, 1.0, 0.0])
     
     # Sample points from the mesh for point cloud operations
     print("Sampling points from mesh...")
-    point_cloud = sample_mesh_points(mesh, num_points=10000)
-    point_cloud.paint_uniform_color([0.0, 0.0, 1.0])
+    point_cloud = mesh.sample_points_poisson_disk(10000)
+    point_cloud.paint_uniform_color([0.0, 1.0, 0.0])
     
 
     os.makedirs(output_dir, exist_ok=True)
