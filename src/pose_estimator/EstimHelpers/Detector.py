@@ -46,15 +46,10 @@ class Detector:
                 results.masks.data,
                 results.boxes.xyxy
         ):
-            result_sam = self.sam(img_bgr, bboxes=bbox.cpu().numpy().tolist())
+            result_sam = self.sam(img_bgr, bboxes=bbox.cpu().numpy().tolist(), device=0, save=False, verbose=False)
             if result_sam[0].masks is None:
                 continue
             
-            # print("A"*50)
-            # print(result_sam[0].masks.data.cpu(), type(result_sam[0].masks.data.cpu()))
-            # print("B"*50)
-            # print(data.cpu(), type(data.cpu()))
-            # poly_np = np.array(result_sam[0].xy, dtype=np.int32)
 
             # Create binary mask
             mask = result_sam[0].masks.data.cpu()#np.zeros((h, w), dtype=np.uint8)
